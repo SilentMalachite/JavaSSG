@@ -1,0 +1,167 @@
+name: ✨ 機能要望
+description: 新機能や改善のアイデアを提案してください
+title: "[機能要望] "
+labels: ["enhancement", "needs-discussion"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        新機能のアイデアをありがとうございます！
+        このテンプレートを使用して、提案の詳細を教えてください。
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: 確認事項
+      options:
+        - label: 既存のIssueで同様の機能要望がないことを確認しました
+          required: true
+        - label: この機能がJavaSSGの目的に適していると思います
+          required: true
+        - label: 実装の複雑さを理解しています
+          required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 機能カテゴリ
+      description: この機能要望が属するカテゴリを選択してください
+      options:
+        - ビルドエンジン
+        - テンプレートシステム
+        - プラグインシステム
+        - セキュリティ
+        - パフォーマンス
+        - CLI インターフェース
+        - 開発サーバー
+        - ドキュメント
+        - その他
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 優先度
+      description: この機能の重要度を選択してください
+      options:
+        - 低 - あったら便利
+        - 中 - 改善に役立つ
+        - 高 - 重要な機能
+        - 緊急 - 必須の機能
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したい問題
+      description: この機能によって解決したい問題や不便さを説明してください
+      placeholder: 現在の制約や困っていることを具体的に説明してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 提案する解決策
+      description: どのような機能や改善を提案しますか？
+      placeholder: 具体的な機能の内容、使用方法、インターフェースなどを説明してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: 使用例
+      description: この機能をどのような場面で使用しますか？
+      value: |
+        ### 使用例1
+        [具体的な使用シナリオ]
+
+        ### 使用例2
+        [別の使用シナリオ]
+
+        ### 期待される効果
+        [この機能によって得られる利益]
+    validations:
+      required: true
+
+  - type: textarea
+    id: api-design
+    attributes:
+      label: API/インターフェース設計
+      description: 新しいAPIやコマンドラインインターフェースのアイデアがあれば説明してください
+      render: java
+      placeholder: |
+        // 例: 新しいAPI
+        public interface NewFeature {
+            Result process(Input input);
+        }
+
+        // 例: 新しいCLIコマンド
+        javassg new-command --option value
+
+  - type: textarea
+    id: config-example
+    attributes:
+      label: 設定例
+      description: 新しい設定オプションが必要な場合、設定例を示してください
+      render: yaml
+      placeholder: |
+        # config.yaml
+        new_feature:
+          enabled: true
+          option1: value1
+          option2: value2
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 代替案
+      description: 他に考えられる解決方法や既存の回避策があれば説明してください
+      placeholder: 現在の回避策や、異なるアプローチについて
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: 影響範囲
+      description: この機能が既存の機能や性能に与える影響について考察してください
+      value: |
+        ### パフォーマンスへの影響
+        [予想される性能への影響]
+
+        ### 既存機能との互換性
+        [後方互換性や既存機能への影響]
+
+        ### セキュリティへの影響
+        [セキュリティ上の考慮事項]
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: 実装のアイデア
+      description: 実装方法について何かアイデアがあれば共有してください（オプション）
+      placeholder: |
+        実装の難易度、必要な技術、既存コードへの変更点など
+        （実装の詳細がわからなくても構いません）
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 貢献意向
+      description: この機能の実装に貢献したいですか？
+      options:
+        - label: この機能の実装に協力したいです
+        - label: テストやレビューで協力したいです
+        - label: ドキュメント作成で協力したいです
+        - label: 要望のみで、実装は他の人にお任せします
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 追加情報
+      description: その他、提案に関連する情報があれば教えてください
+      placeholder: 参考リンク、類似プロジェクトの実装例、詳細な技術資料など

@@ -1,0 +1,104 @@
+name: 🐛 バグ報告
+description: バグや問題を報告してください
+title: "[バグ] "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        JavaSSGのバグ報告をありがとうございます！
+        このテンプレートを使用して、問題の詳細を教えてください。
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: 確認事項
+      options:
+        - label: 既存のIssueで同様の問題が報告されていないことを確認しました
+          required: true
+        - label: 最新バージョンで問題が再現することを確認しました
+          required: true
+        - label: セキュリティに関する問題ではありません（セキュリティ問題は SECURITY.md を参照）
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: JavaSSGのバージョン
+      description: 使用しているJavaSSGのバージョンを教えてください
+      placeholder: "例: 1.0.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 環境情報
+      description: 実行環境の詳細を教えてください
+      value: |
+        - OS: [例: macOS 14.0, Windows 11, Ubuntu 22.04]
+        - Java: [例: OpenJDK 21.0.1]
+        - Maven: [例: 3.9.5]
+        - その他の関連ツール: 
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 問題の説明
+      description: 発生している問題について詳しく説明してください
+      placeholder: 何が起こっているか、何が期待されているかを具体的に説明してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 問題を再現するための手順を教えてください
+      value: |
+        1. [最初のステップ]
+        2. [次のステップ]
+        3. [問題が発生するステップ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待される動作
+      description: 本来どのような動作をするべきかを説明してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動作
+      description: 実際に何が起こったかを説明してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログやエラーメッセージ
+      description: 関連するログやエラーメッセージがあれば貼り付けてください
+      render: shell
+
+  - type: textarea
+    id: config
+    attributes:
+      label: 設定ファイル
+      description: 関連する設定ファイル（config.yaml等）の内容を貼り付けてください（機密情報は除く）
+      render: yaml
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 追加情報
+      description: その他、問題の理解に役立つ情報があれば教えてください
+      placeholder: スクリーンショット、関連ファイル、回避策など

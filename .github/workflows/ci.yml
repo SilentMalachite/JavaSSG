@@ -1,0 +1,292 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  test:
+    name: テスト実行
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version: [21]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+      
+    - name: Java ${{ matrix.java-version }} のセットアップ
+      uses: actions/setup-java@v4
+      with:
+        java-version: ${{ matrix.java-version }}
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: Mavenの検証
+      run: mvn --version
+      
+    - name: 依存関係の解決
+      run: mvn dependency:resolve
+      
+    - name: コンパイル
+      run: mvn clean compile
+      
+    - name: テスト実行
+      run: mvn test
+      
+    - name: カバレッジレポート生成
+      run: mvn jacoco:report
+      
+    - name: カバレッジレポートのアップロード
+      if: matrix.os == 'ubuntu-latest'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./target/site/jacoco/jacoco.xml
+        flags: unittests
+        name: codecov-umbrella
+        
+    - name: テスト結果の保存
+      uses: dorny/test-reporter@v1
+      if: success() || failure()
+      with:
+        name: Maven Tests (${{ matrix.os }})
+        path: target/surefire-reports/*.xml
+        reporter: java-junit
+
+  security:
+    name: セキュリティスキャン
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+      
+    - name: Java 21のセットアップ
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: 依存関係の脆弱性スキャン
+      run: mvn org.owasp:dependency-check-maven:check
+      
+    - name: セキュリティレポートのアップロード
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-report
+        path: target/dependency-check-report.html
+
+  build:
+    name: ビルドとパッケージング
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+      
+    - name: Java 21のセットアップ
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: バージョン情報の設定
+      run: |
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        else
+          echo "VERSION=${GITHUB_SHA:0:8}" >> $GITHUB_ENV
+        fi
+        
+    - name: パッケージング
+      run: mvn clean package -DskipTests
+      
+    - name: JAR署名
+      if: github.event_name == 'release'
+      run: |
+        # 本番環境では適切な証明書で署名
+        echo "JAR署名をスキップ（開発環境）"
+        
+    - name: アーティファクトのアップロード
+      uses: actions/upload-artifact@v3
+      with:
+        name: javassg-${{ env.VERSION }}
+        path: target/javassg-*.jar
+        
+    - name: Dockerイメージのビルド
+      if: github.event_name == 'release'
+      run: |
+        docker build -t javassg:${{ env.VERSION }} .
+        docker tag javassg:${{ env.VERSION }} javassg:latest
+
+  integration-test:
+    name: 統合テスト
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+      
+    - name: Java 21のセットアップ
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: アーティファクトのダウンロード
+      uses: actions/download-artifact@v3
+      with:
+        name: javassg-${{ env.VERSION || github.sha }}
+        path: target/
+        
+    - name: 統合テストの実行
+      run: |
+        # 実際のJARを使用した統合テスト
+        java -jar target/javassg-*.jar --version
+        
+        # テストサイトの生成
+        mkdir test-site
+        cd test-site
+        
+        # 設定ファイルの作成
+        cat > config.yaml << EOF
+        site:
+          title: "Integration Test Site"
+          description: "テスト用サイト"
+          url: "https://example.com"
+          language: "ja-JP"
+          author:
+            name: "Test User"
+            email: "test@example.com"
+        build:
+          contentDirectory: "content"
+          outputDirectory: "_site"
+          staticDirectory: "static"
+          templatesDirectory: "templates"
+        EOF
+        
+        # ディレクトリ構造の作成
+        mkdir -p content/posts templates static
+        
+        # テストコンテンツの作成
+        cat > content/index.md << EOF
+        ---
+        title: "ホーム"
+        ---
+        # テストサイト
+        これは統合テスト用のサイトです。
+        EOF
+        
+        # テンプレートの作成
+        cat > templates/base.html << EOF
+        <!DOCTYPE html>
+        <html>
+        <head><title>{{ title }}</title></head>
+        <body>{{ content }}</body>
+        </html>
+        EOF
+        
+        # ビルドの実行
+        java -jar ../target/javassg-*.jar build
+        
+        # 生成ファイルの確認
+        test -f _site/index.html
+        grep -q "テストサイト" _site/index.html
+
+  performance-test:
+    name: パフォーマンステスト
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+      
+    - name: Java 21のセットアップ
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: JMHベンチマークの実行
+      run: |
+        mvn clean compile
+        # mvn exec:java -Dexec.mainClass="com.javassg.benchmark.BenchmarkRunner"
+        echo "パフォーマンステストをスキップ（未実装）"
+
+  deploy:
+    name: デプロイ
+    runs-on: ubuntu-latest
+    needs: [integration-test, performance-test]
+    if: github.event_name == 'release'
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+      
+    - name: Java 21のセットアップ
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+        server-id: central
+        server-username: MAVEN_USERNAME
+        server-password: MAVEN_CENTRAL_TOKEN
+        
+    - name: アーティファクトのダウンロード
+      uses: actions/download-artifact@v3
+      with:
+        name: javassg-${{ github.ref_name }}
+        path: target/
+        
+    - name: Maven Centralへのデプロイ
+      run: |
+        echo "Maven Centralへのデプロイをスキップ（開発環境）"
+        # mvn deploy -DskipTests
+      env:
+        MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+        MAVEN_CENTRAL_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
+        
+    - name: GitHub Releaseへのアップロード
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: target/javassg-*.jar
+        asset_name: javassg-${{ github.ref_name }}.jar
+        asset_content_type: application/java-archive
+
+  notification:
+    name: 通知
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+    
+    steps:
+    - name: 成功通知
+      if: needs.deploy.result == 'success'
+      run: |
+        echo "✅ デプロイが正常に完了しました"
+        # Slack, Discord, メール通知などを実装
+        
+    - name: 失敗通知
+      if: needs.deploy.result == 'failure'
+      run: |
+        echo "❌ デプロイが失敗しました"
+        # 失敗通知を実装
