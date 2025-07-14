@@ -6,6 +6,7 @@
 ![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square)
 
 Java21で構築された、モダンで高速、かつセキュアな静的サイトジェネレーターです。
+Swiftで構築した　![Hirundo](https://github.com/SilentMalachite/Hirundo)　のJavaバージョンです
 
 ## ✨ 主な機能
 
