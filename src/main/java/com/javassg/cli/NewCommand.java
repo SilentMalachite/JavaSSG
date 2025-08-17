@@ -1,5 +1,7 @@
 package com.javassg.cli;
 
+import java.nio.charset.StandardCharsets;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -181,7 +183,7 @@ public class NewCommand {
         String frontMatter = createPostFrontMatter(options, postDate);
         String content = frontMatter + "\n\n# " + options.title + "\n\n記事の内容をここに書いてください。\n";
         
-        Files.write(postFile, content.getBytes());
+        Files.writeString(postFile, content, StandardCharsets.UTF_8);
         
         System.out.println("新しい記事を作成しました: " + postFile);
         
@@ -226,7 +228,7 @@ public class NewCommand {
         String frontMatter = createPageFrontMatter(options);
         String content = frontMatter + "\n\n# " + options.title + "\n\nページの内容をここに書いてください。\n";
         
-        Files.write(pageFile, content.getBytes());
+        Files.writeString(pageFile, content, StandardCharsets.UTF_8);
         
         System.out.println("新しいページを作成しました: " + pageFile);
         
@@ -266,18 +268,18 @@ public class NewCommand {
         // テンプレート固有の構造
         if ("blog".equals(options.template)) {
             Files.createDirectories(siteDir.resolve("content/posts"));
-            Files.write(siteDir.resolve("templates/post.html"), createPostTemplate().getBytes());
-            Files.write(siteDir.resolve("templates/archive.html"), createArchiveTemplate().getBytes());
+            Files.writeString(siteDir.resolve("templates/post.html"), createPostTemplate(), StandardCharsets.UTF_8);
+            Files.writeString(siteDir.resolve("templates/archive.html"), createArchiveTemplate(), StandardCharsets.UTF_8);
         }
         
         // 設定ファイル
         String configContent = createSiteConfig(options);
-        Files.write(siteDir.resolve("config.yaml"), configContent.getBytes());
+        Files.writeString(siteDir.resolve("config.yaml"), configContent, StandardCharsets.UTF_8);
         
         // デフォルトファイル
-        Files.write(siteDir.resolve("content/index.md"), createIndexPage().getBytes());
-        Files.write(siteDir.resolve("templates/base.html"), createBaseTemplate().getBytes());
-        Files.write(siteDir.resolve("static/css/style.css"), createDefaultCSS().getBytes());
+        Files.writeString(siteDir.resolve("content/index.md"), createIndexPage(), StandardCharsets.UTF_8);
+        Files.writeString(siteDir.resolve("templates/base.html"), createBaseTemplate(), StandardCharsets.UTF_8);
+        Files.writeString(siteDir.resolve("static/css/style.css"), createDefaultCSS(), StandardCharsets.UTF_8);
     }
     
     private String createPostFrontMatter(NewOptions options, LocalDate date) {

@@ -1,5 +1,9 @@
 package com.javassg.cli;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
+
 /**
  * JavaSSGのメインCLIインターフェース
  */
@@ -12,22 +16,50 @@ public class CommandLineInterface {
             showHelp();
             return 0;
         }
-        
-        String firstArg = args[0];
-        
-        // グローバルオプションの処理
-        switch (firstArg) {
-            case "--help", "-h":
-                showHelp();
-                return 0;
-            case "--version", "-v":
-                showVersion();
-                return 0;
-            default:
-                // 不明なコマンドの場合
-                System.out.println("Unknown command: " + firstArg);
-                System.out.println("Run 'javassg --help' for usage information.");
-                return 1;
+
+        // グローバルオプション（最低限）の解釈：作業ディレクトリのみ適用
+        Path workingDir = Paths.get(System.getProperty("user.dir"));
+        for (int i = 0; i < args.length; i++) {
+            if ("--working-directory".equals(args[i]) && i + 1 < args.length) {
+                workingDir = Paths.get(args[i + 1]);
+                i++;
+            }
+        }
+
+        // サブコマンド or グローバルオプション
+        // 先頭の非オプション引数をコマンドとして扱う
+        String firstArg = Arrays.stream(args)
+                .filter(a -> !a.startsWith("-"))
+                .findFirst()
+                .orElse(args[0]);
+
+        // グローバルオプション
+        if ("--help".equals(firstArg) || "-h".equals(firstArg)) {
+            showHelp();
+            return 0;
+        }
+        if ("--version".equals(firstArg) || "-v".equals(firstArg)) {
+            showVersion();
+            return 0;
+        }
+
+        // サブコマンドのディスパッチ（引数はそのまま委譲：各コマンドが解析）
+        try {
+            switch (firstArg) {
+                case "serve":
+                    return new ServeCommand().execute(args, workingDir);
+                case "build":
+                    return new BuildCommand().execute(args, workingDir);
+                case "new":
+                    return new NewCommand().execute(args, workingDir);
+                default:
+                    System.out.println("Unknown command: " + firstArg);
+                    System.out.println("Run 'javassg --help' for usage information.");
+                    return 1;
+            }
+        } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
+            return 1;
         }
     }
     

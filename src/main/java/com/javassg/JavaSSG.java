@@ -62,7 +62,10 @@ public class JavaSSG {
      */
     public static void printInfo() {
         System.out.println("JavaSSG - Java Static Site Generator");
-        System.out.println("Version: 1.0.0");
+        String implVersion = JavaSSG.class.getPackage() != null
+            ? JavaSSG.class.getPackage().getImplementationVersion()
+            : null;
+        System.out.println("Version: " + (implVersion != null ? implVersion : "1.0.0"));
         System.out.println("Java Version: " + System.getProperty("java.version"));
         System.out.println("OS: " + System.getProperty("os.name"));
     }

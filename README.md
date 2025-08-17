@@ -51,126 +51,54 @@ mvn install
 
 ## 🚀 クイックスタート
 
-### 1. 新しいサイトの作成
+### 1. サイトのスキャフォールド生成
 
 ```bash
-# プロジェクトディレクトリを作成
-mkdir my-site
-cd my-site
+# リポジトリのルートで実行
+java -jar target/javassg-1.0.0.jar new site my-site
 
-# 基本構造を作成
-mkdir -p content/posts templates static
+# 任意: ブログ向けテンプレートで生成
+java -jar target/javassg-1.0.0.jar new site my-site --template blog
 ```
 
-### 2. 設定ファイルの作成
+作成される主な構成: `my-site/content`, `my-site/templates`, `my-site/static`, `my-site/config.yaml`（テンプレートに応じて追加ファイルも生成）
 
-`config.yaml`を作成：
+### 2. 記事を作成（任意）
 
-```yaml
-site:
-  title: "私のサイト"
-  description: "JavaSSGで作成されたサイトです"
-  url: "https://example.com"
-  language: "ja-JP"
-  author:
-    name: "あなたの名前"
-    email: "your-email@example.com"
-
-build:
-  contentDirectory: "content"
-  outputDirectory: "_site"
-  staticDirectory: "static"
-  templatesDirectory: "templates"
-
-server:
-  port: 8080
-  liveReload: true
-
-blog:
-  postsPerPage: 10
-  generateArchive: true
-  generateCategories: true
-  generateTags: true
+```bash
+# サイト配下にブログ記事を作成（公開・タグ/カテゴリ例）
+java -jar target/javassg-1.0.0.jar new post "最初の記事" \
+  --published --category Blog --tag intro,news \
+  --working-directory ./my-site
 ```
 
-### 3. コンテンツの作成
+### 3. 開発サーバーを起動
 
-`content/index.md`を作成：
-
-```markdown
----
-title: "ホーム"
-description: "サイトのホームページです"
----
-
-# ようこそ
-
-JavaSSGへようこそ！このサイトは高速で安全な静的サイトジェネレーターで構築されています。
+```bash
+java -jar target/javassg-1.0.0.jar serve --working-directory ./my-site
 ```
 
-`content/posts/first-post.md`を作成：
+#### テンプレート別の作成物
 
-```markdown
----
-title: "最初の記事"
-date: 2024-01-01T10:00:00
-categories:
-  - ブログ
-  - お知らせ
-tags:
-  - JavaSSG
-  - Markdown
----
-
-# 最初の記事
-
-これは最初のブログ記事です。JavaSSGの機能を紹介していきます。
-
-## 特徴
-
-- 高速なビルド
-- セキュアな処理
-- 使いやすいMarkdown記法
-```
-
-### 4. テンプレートの作成
-
-`templates/base.html`を作成：
-
-```html
-<!DOCTYPE html>
-<html lang="{{ site.language }}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }} - {{ site.title }}</title>
-    <meta name="description" content="{{ description }}">
-</head>
-<body>
-    <header>
-        <h1><a href="/">{{ site.title }}</a></h1>
-        <p>{{ site.description }}</p>
-    </header>
-    
-    <main>
-        {{ content }}
-    </main>
-    
-    <footer>
-        <p>&copy; 2024 {{ site.author.name }}</p>
-    </footer>
-</body>
-</html>
-```
+- default:
+  - ディレクトリ: `content/`, `templates/`, `static/css/`, `static/js/`, `static/images/`
+  - ファイル: `config.yaml`, `content/index.md`, `templates/base.html`, `static/css/style.css`
+- blog:
+  - 上記に加えて: `content/posts/`, `templates/post.html`, `templates/archive.html`
+- portfolio / documentation:
+  - 現状はdefaultと同一構成（将来拡張予定）
 
 ### 5. ビルドと実行
 
 ```bash
-# 開発サーバーの起動
-java -jar target/javassg-1.0.0.jar serve
+# JavaSSG リポジトリのルートで実行（作業ディレクトリは my-site）
+java -jar target/javassg-1.0.0.jar serve --working-directory ./my-site
 
-# または、本番用ビルド
-java -jar target/javassg-1.0.0.jar build --production
+# または Maven から
+mvn exec:java -Dexec.mainClass="com.javassg.JavaSSG" -Dexec.args="serve --working-directory ./my-site"
+
+# 本番用ビルド
+java -jar target/javassg-1.0.0.jar build --production --working-directory ./my-site
 ```
 
 ## 📋 使用方法
@@ -182,8 +110,13 @@ java -jar target/javassg-1.0.0.jar build --production
 javassg serve [オプション]
 ```
 
-- `--port <ポート番号>`: サーバーポートを指定（デフォルト: 8080）
-- `--no-livereload`: ライブリロードを無効化
+- `--port <ポート番号>`: サーバーポート（デフォルト: 8080）
+- `--host <ホスト>`: バインドアドレス（例: 0.0.0.0）
+- `--live-reload` / `--no-live-reload`: ライブリロードの有効/無効
+- `--open`: ブラウザ自動起動、`--build`: 起動前にビルド
+- `--stats` / `--verbose`: 統計/詳細ログの表示
+- `--config <file>` / `--output <dir>`: 設定/配信ディレクトリを指定
+- グローバル: `--working-directory <dir>` を併用可
 
 #### 本番用ビルド
 ```bash
@@ -195,6 +128,7 @@ javassg build [オプション]
 - `--clean`: クリーンビルド
 - `--incremental`: 増分ビルド
 - `--verbose`: 詳細ログ出力
+- グローバル: `--working-directory <dir>`、`--config <file>` を併用可
 
 #### 新規コンテンツの作成
 ```bash
@@ -314,8 +248,8 @@ mvn clean install
 # テストの実行
 mvn test
 
-# 開発サーバーの起動
-mvn exec:java -Dexec.mainClass="com.javassg.JavaSSG" -Dexec.args="serve"
+# 開発サーバーの起動（サイトの場所を指定）
+mvn exec:java -Dexec.mainClass="com.javassg.JavaSSG" -Dexec.args="serve --working-directory /path/to/site"
 ```
 
 ### テスト
