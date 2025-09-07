@@ -116,6 +116,9 @@ _site/
 _cache/
 .sass-cache/
 
+## jpackage output
+target/jpackage/
+
 ## Local configuration
 config.local.yaml
 *.local.yaml
@@ -190,3 +193,6 @@ yarn-error.log*
 # JavaSSG test fixtures
 src/test/resources/fixtures/output/
 src/test/resources/temp/
+
+# Crush development files
+.crush/

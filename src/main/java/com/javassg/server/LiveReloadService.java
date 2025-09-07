@@ -75,6 +75,7 @@ public class LiveReloadService {
     
     public void handleMessage(WebSocketSession session, String message) {
         try {
+            @SuppressWarnings("unchecked")
             Map<String, Object> messageData = objectMapper.readValue(message, Map.class);
             String command = (String) messageData.get("command");
             

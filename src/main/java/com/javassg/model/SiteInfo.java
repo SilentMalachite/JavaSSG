@@ -18,9 +18,9 @@ public record SiteInfo(
     
     private static boolean isValidUrl(String url) {
         try {
-            new java.net.URL(url);
+            java.net.URI.create(url).toURL();
             return true;
-        } catch (java.net.MalformedURLException e) {
+        } catch (java.net.MalformedURLException | IllegalArgumentException e) {
             return false;
         }
     }

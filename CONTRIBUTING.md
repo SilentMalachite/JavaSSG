@@ -1,360 +1,210 @@
-# コントリビューションガイド
-
-JavaSSGプロジェクトへのコントリビューションに興味を持っていただき、ありがとうございます！このガイドでは、プロジェクトに貢献する方法について説明します。
+# Contributing to JavaSSG
 
-## 📋 目次
+Thank you for your interest in contributing to JavaSSG! This document provides guidelines and information for contributors.
 
-- [行動規範](#行動規範)
-- [コントリビューションの種類](#コントリビューションの種類)
-- [開発環境のセットアップ](#開発環境のセットアップ)
-- [コーディング規約](#コーディング規約)
-- [プルリクエストの流れ](#プルリクエストの流れ)
-- [テストについて](#テストについて)
-- [ドキュメントについて](#ドキュメントについて)
-- [質問・サポート](#質問サポート)
-
-## 行動規範
-
-このプロジェクトでは、すべての参加者に対して敬意を持った行動を期待しています：
-
-- 建設的で丁寧なコミュニケーションを心がける
-- 異なる視点や経験を尊重する
-- 批判は人ではなく、コードやアイデアに対して行う
-- 学習と成長の機会として捉える
-
-## コントリビューションの種類
-
-以下のような方法でプロジェクトに貢献できます：
-
-### 🐛 バグ報告
-- 詳細な再現手順
-- エラーメッセージやログ
-- 環境情報（OS、Javaバージョンなど）
-
-### 💡 機能要望
-- 新機能の詳細な説明
-- 使用例やユースケース
-- 既存の代替手段との比較
-
-### 📝 ドキュメント改善
-- README、チュートリアル、APIドキュメントの改善
-- 誤字脱字の修正
-- 新しい例やサンプルの追加
-
-### 🔧 コード貢献
-- バグ修正
-- 新機能の実装
-- パフォーマンス改善
-- テストの追加
-
-## 開発環境のセットアップ
-
-### 必要な環境
-
-```bash
-# Java 21の確認
-java -version
-
-# Mavenの確認
-mvn -version
-```
-
-### リポジトリのクローンとセットアップ
-
-```bash
-# フォークしたリポジトリをクローン
-git clone https://github.com/yourusername/JavaSSG.git
-cd JavaSSG
-
-# 依存関係のインストール
-mvn clean install
-
-# テストの実行
-mvn test
-
-# 動作確認
-mvn exec:java -Dexec.mainClass="com.javassg.JavaSSG" -Dexec.args="--help"
-```
-
-### IDEの設定
-
-#### IntelliJ IDEA
-1. プロジェクトをMavenプロジェクトとして開く
-2. Java 21が設定されていることを確認
-3. コードフォーマッター設定をインポート（`.idea/codeStyles/`）
-
-#### VS Code
-1. Java Extension Packをインストール
-2. `settings.json`で以下を設定：
-```json
-{
-  "java.home": "/path/to/java21",
-  "java.configuration.runtimes": [
-    {
-      "name": "JavaSE-21",
-      "path": "/path/to/java21"
-    }
-  ]
-}
-```
-
-## コーディング規約
-
-### Java コーディングスタイル
-
-```java
-// クラス名：パスカルケース
-public class HtmlGenerator {
-
-    // 定数：SCREAMING_SNAKE_CASE
-    private static final String DEFAULT_TEMPLATE = "default";
-    
-    // フィールド：キャメルケース
-    private final SiteConfig siteConfig;
-    
-    // メソッド名：キャメルケース
-    public String generatePageHtml(Page page) {
-        // ローカル変数：キャメルケース
-        String templateName = getTemplateName(page);
-        return processTemplate(templateName, page);
-    }
-}
-```
-
-### 重要な原則
-
-1. **セキュリティファースト**: すべての入力を検証し、出力をサニタイズ
-2. **型安全性**: できる限り型安全なコードを書く
-3. **null安全性**: Optional型を活用し、nullチェックを徹底
-4. **不変性**: できる限りimmutableなオブジェクトを使用
-5. **テスタビリティ**: テストしやすい設計を心がける
-
-### コメントとドキュメント
-
-```java
-/**
- * ページのHTMLを生成します。
- * 
- * @param page 変換するページオブジェクト
- * @param templateName 使用するテンプレート名
- * @return 生成されたHTML文字列
- * @throws HtmlGenerationException HTML生成中にエラーが発生した場合
- */
-public String generatePageHtml(Page page, String templateName) throws HtmlGenerationException {
-    // テンプレートの取得と検証
-    Template template = getTemplate(templateName);
-    
-    // セキュリティ検証
-    securityValidator.validateContent(page.rawContent());
-    
-    return renderTemplate(template, page);
-}
-```
-
-## プルリクエストの流れ
-
-### 1. Issue の作成・確認
-
-新機能やバグ修正を行う前に、関連するIssueが存在するか確認してください。存在しない場合は、新しいIssueを作成して議論してください。
-
-### 2. ブランチの作成
-
-```bash
-# 最新のmainブランチをフェッチ
-git checkout main
-git pull upstream main
-
-# 機能ブランチを作成
-git checkout -b feature/new-template-engine
-# または
-git checkout -b fix/security-vulnerability
-```
-
-### 3. 開発とコミット
-
-```bash
-# 変更を加える
-# ...
-
-# テストを実行
-mvn test
-
-# 変更をコミット
-git add .
-git commit -m "feat: 新しいテンプレートエンジンのサポートを追加
-
-- Mustacheテンプレートエンジンの統合
-- 既存のテンプレートとの互換性を維持
-- セキュリティ検証の強化
-
-Closes #123"
-```
-
-### 4. プルリクエストの作成
-
-プルリクエストのテンプレート：
-
-```markdown
-## 概要
-この変更の概要を説明してください。
-
-## 変更内容
-- [ ] 新機能の追加
-- [ ] バグ修正
-- [ ] ドキュメント更新
-- [ ] テスト追加
-- [ ] リファクタリング
-
-## テスト
-- [ ] 既存のテストがすべて通ることを確認
-- [ ] 新しいテストを追加（該当する場合）
-- [ ] 手動テストを実行（該当する場合）
-
-## チェックリスト
-- [ ] コーディング規約に従っている
-- [ ] セキュリティ要件を満たしている
-- [ ] ドキュメントを更新している（該当する場合）
-- [ ] 後方互換性を維持している
-
-## 関連Issue
-Closes #(issue番号)
-```
-
-## テストについて
+## Code of Conduct
 
-### テストの種類
-
-1. **単体テスト**: 個別のクラス・メソッドのテスト
-2. **統合テスト**: 複数のコンポーネント間の連携テスト
-3. **セキュリティテスト**: セキュリティ機能の検証
-4. **パフォーマンステスト**: 性能要件の確認
-
-### テストの書き方
+This project follows a code of conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to the project maintainers.
 
-```java
-@DisplayName("SecurityValidator Tests")
-class SecurityValidatorTest {
+## Getting Started
 
-    @BeforeEach
-    void setUp() {
-        validator = new SecurityValidator(SecurityLimits.defaultLimits());
-    }
+### Prerequisites
 
-    @Test
-    @DisplayName("XSS攻撃を検出すること")
-    void shouldDetectXssAttack() {
-        String maliciousContent = "<script>alert('xss')</script>";
-        
-        assertThatThrownBy(() -> validator.validateContent(maliciousContent))
-            .isInstanceOf(SecurityException.class)
-            .hasMessageContaining("危険なスクリプトタグが検出されました");
-    }
-}
-```
+- Java 21 or higher
+- Maven 3.9 or higher
+- Git
 
-### テストの実行
+### Development Setup
 
-```bash
-# 全テストの実行
-mvn test
+1. Fork the repository on GitHub
+2. Clone your fork locally:
+   ```bash
+   git clone https://github.com/yourusername/JavaSSG.git
+   cd JavaSSG
+   ```
+3. Add the upstream repository:
+   ```bash
+   git remote add upstream https://github.com/originalowner/JavaSSG.git
+   ```
+4. Install dependencies:
+   ```bash
+   mvn clean install
+   ```
 
-# 特定のテストクラスの実行
-mvn test -Dtest=SecurityValidatorTest
+## Development Guidelines
 
-# 特定のテストメソッドの実行
-mvn test -Dtest=SecurityValidatorTest#shouldDetectXssAttack
+### Code Style
 
-# カバレッジレポートの生成
-mvn jacoco:report
-```
+- Follow Java naming conventions
+- Use 4-space indentation
+- Keep methods small and focused
+- Write self-documenting code with meaningful variable and method names
+- Use SLF4J for logging instead of System.out in production code
 
-## ドキュメントについて
+### Testing
 
-### ドキュメントの種類
+- Write unit tests for new functionality
+- Use JUnit 5, Mockito, and AssertJ for testing
+- Aim for reasonable test coverage
+- Run tests before submitting:
+  ```bash
+  mvn test
+  ```
 
-- **README.md**: プロジェクトの概要とクイックスタート
-- **API ドキュメント**: JavaDocによる詳細なAPI説明
-- **チュートリアル**: ステップバイステップのガイド
-- **設定リファレンス**: 設定オプションの詳細
+### Documentation
 
-### ドキュメントの更新
+- Update documentation for any new features
+- Include JavaDoc comments for public APIs
+- Update README.md if installation or usage instructions change
+- Add examples for new features
 
-コードの変更に伴って、関連するドキュメントも更新してください：
+## Submitting Changes
 
-```bash
-# JavaDocの生成
-mvn javadoc:javadoc
+### Pull Request Process
 
-# サイトドキュメントの生成
-mvn site
-```
+1. Create a feature branch from `main`:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-## 質問・サポート
+2. Make your changes and commit them:
+   ```bash
+   git commit -m "Add: brief description of changes"
+   ```
 
-### 質問する前に
+3. Push your branch to your fork:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
 
-1. [FAQ](docs/faq.md)を確認する
-2. 既存のIssueやDiscussionsを検索する
-3. ドキュメントを確認する
+4. Create a Pull Request on GitHub
 
-### 質問の仕方
+### Commit Message Format
 
-良い質問の例：
+Use imperative mood and be concise:
 
-```markdown
-## 環境
-- OS: macOS 14.0
-- Java: 21.0.1
-- JavaSSG: 1.0.0
+- `Add: feature description`
+- `Fix: bug description`
+- `Update: component description`
+- `Remove: deprecated feature`
+- `Refactor: code improvement`
 
-## 問題
-カスタムテンプレートエンジンを作成したいのですが、既存のTemplateEngineインターフェースを拡張する方法がわかりません。
+### Pull Request Guidelines
 
-## 試したこと
-1. TemplateEngineインターフェースを調査
-2. 既存の実装（SimpleTemplateEngine）を参考にした
-3. ドキュメントを確認した
+- Provide a clear description of changes
+- Link any related issues
+- Include screenshots for UI changes
+- Ensure all tests pass
+- Update documentation as needed
 
-## 期待する結果
-Mustacheテンプレートエンジンを統合したい
+## Issue Reporting
 
-## 実際の結果
-コンパイルエラーが発生する
+### Bug Reports
 
-## エラーメッセージ
-```
-java.lang.ClassCastException: ...
-```
-```
+When reporting bugs, please include:
 
-### サポートチャンネル
+- Java version
+- Operating system
+- Steps to reproduce
+- Expected vs actual behavior
+- Error messages or logs
 
-- **GitHub Issues**: バグ報告・機能要望
-- **GitHub Discussions**: 一般的な質問・議論
-- **メール**: セキュリティに関する報告（security@example.com）
+### Feature Requests
 
-## リリースプロセス
+For feature requests, please provide:
 
-### バージョニング
+- Clear description of the feature
+- Use case and motivation
+- Potential implementation approach (if you have ideas)
 
-[Semantic Versioning](https://semver.org/)に従います：
+## Development Areas
 
-- **MAJOR**: 後方互換性のない変更
-- **MINOR**: 後方互換性のある機能追加
-- **PATCH**: 後方互換性のあるバグ修正
+### High Priority
 
-### リリースの流れ
+- Performance optimizations
+- Security enhancements
+- Plugin system improvements
+- Documentation improvements
 
-1. 機能の完成とテスト
-2. ドキュメントの更新
-3. CHANGELOGの更新
-4. バージョンタグの作成
-5. GitHub Releaseの作成
+### Medium Priority
 
-## 謝辞
+- Additional template themes
+- Enhanced CLI features
+- Better error handling
+- Internationalization support
 
-JavaSSGプロジェクトへのコントリビューションに感謝します！あなたの貢献により、より良いツールを作ることができます。
+### Low Priority
 
----
+- Additional plugins
+- Advanced caching strategies
+- Performance monitoring
 
-何か質問がある場合は、お気軽にIssueやDiscussionで質問してください。
+## Architecture Overview
+
+### Core Components
+
+- `com.javassg.JavaSSG` - Main entry point
+- `com.javassg.cli.*` - Command-line interface
+- `com.javassg.build.*` - Build pipeline
+- `com.javassg.server.*` - Development server
+- `com.javassg.parser.*` - Markdown parsing
+- `com.javassg.template.*` - Template engine
+- `com.javassg.plugin.*` - Plugin system
+- `com.javassg.cache.*` - Caching system
+- `com.javassg.security.*` - Security features
+
+### Key Design Principles
+
+- Type safety throughout the codebase
+- Comprehensive input validation
+- Memory-efficient processing
+- Extensible plugin architecture
+- Security-first approach
+
+## Testing Guidelines
+
+### Unit Tests
+
+- Place tests in `src/test/java/` mirroring the main package structure
+- Name test classes with `*Test.java` suffix
+- Use descriptive test method names
+- Test both positive and negative cases
+
+### Integration Tests
+
+- Test complete workflows
+- Verify file system interactions
+- Test plugin integration
+- Validate configuration loading
+
+### Performance Tests
+
+- Benchmark critical paths
+- Test memory usage
+- Verify caching effectiveness
+- Measure build times
+
+## Security Considerations
+
+When contributing, please consider:
+
+- Input validation and sanitization
+- Path traversal prevention
+- XSS attack prevention
+- Safe file handling
+- Resource limits
+
+## Getting Help
+
+- Check existing issues and discussions
+- Join our community discussions
+- Contact maintainers for guidance
+
+## Recognition
+
+Contributors will be recognized in:
+- CONTRIBUTORS.md file
+- Release notes
+- Project documentation
+
+Thank you for contributing to JavaSSG!

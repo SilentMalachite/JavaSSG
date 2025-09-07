@@ -43,7 +43,24 @@ cd JavaSSG
 mvn clean package
 ```
 
-### 3. インストール（オプション）
+### 3. ネイティブアプリケーションの作成（推奨）
+
+```bash
+# ネイティブアプリケーションをビルド
+mvn clean package jpackage:jpackage
+
+# 生成されたアプリケーションを実行
+./target/jpackage/JavaSSG/bin/JavaSSG --help
+```
+
+### 4. JARファイルでの実行
+
+```bash
+# JARファイルで実行
+java -jar target/javassg-1.0.0.jar --help
+```
+
+### 5. インストール（オプション）
 
 ```bash
 mvn install

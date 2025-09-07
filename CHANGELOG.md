@@ -1,167 +1,66 @@
 # Changelog
 
-このファイルには、JavaSSGプロジェクトの注目すべき変更がすべて記録されています。
+All notable changes to this project will be documented in this file.
 
-このフォーマットは[Keep a Changelog](https://keepachangelog.com/ja/1.0.0/)に基づいており、このプロジェクトは[Semantic Versioning](https://semver.org/lang/ja/)に準拠しています。
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.0.0] - 2024-09-08
+
+### Added
+- Initial release of JavaSSG
+- Java 21 based static site generator
+- Multi-level caching system for optimal performance
+- Comprehensive security features (XSS protection, path traversal protection)
+- Markdown support with front matter using CommonMark
+- Template engine with custom filters
+- Live reload development server with WebSocket support
+- Plugin architecture with built-in plugins:
+  - Sitemap generation
+  - RSS feed generation
+  - HTML/CSS minification
+  - Image optimization
+  - Syntax highlighting
+- Command-line interface with serve, build, and new commands
+- YAML configuration support
+- Type-safe configuration models
+- Memory-safe WebSocket connections and file watching
+- Comprehensive test suite with JUnit 5, Mockito, and AssertJ
+
+### Fixed
+- Resolved deprecated API usage in SiteInfo.java (java.net.URL constructor)
+- Fixed type safety warnings in LiveReloadService.java
+- Updated Maven configuration to use --release flag for Java 21 compatibility
+- Eliminated all compilation warnings
+
+### Security
+- Input validation and sanitization
+- Path traversal attack prevention
+- XSS attack detection and prevention
+- Safe template processing
+- File size limitations to prevent DoS attacks
+- Secure asset processing
+
+### Performance
+- Multi-level caching (content, template, rendering)
+- Incremental build support
+- Parallel processing capabilities
+- Memory-optimized streaming processing
+- Intelligent cache invalidation
+
+### Documentation
+- Comprehensive README.md with installation and usage instructions
+- API documentation
+- Security guidelines
+- Performance optimization tips
+- Plugin development guide
 
 ## [Unreleased]
 
-### 追加
-- 新機能の準備中
-
-### 変更
-- 既存機能の改善予定
-
-### 修正
-- バグ修正予定
-
-## [1.0.0] - 2024-01-01
-
-### 追加
-
-#### 🚀 コア機能
-- **静的サイト生成エンジン**: 高速で効率的なMarkdownからHTMLへの変換
-- **マルチレベルキャッシングシステム**: コンテンツ、テンプレート、レンダリング結果の最適化キャッシュ
-- **ライブリロード開発サーバー**: リアルタイムファイル監視と自動再構築
-- **増分ビルド機能**: 変更されたファイルのみを再処理する効率的なビルドシステム
-
-#### 📝 Markdownサポート
-- **CommonMark準拠**: 標準的なMarkdown記法の完全サポート
-- **フロントマター処理**: YAMLフロントマターによるメタデータ管理
-- **日本語コンテンツ対応**: UTF-8エンコーディングと日本語の適切な処理
-- **カスタムMarkdown拡張**: プラグインによる記法の拡張
-
-#### 🎨 テンプレートシステム
-- **柔軟なテンプレートエンジン**: 変数置換とカスタムフィルター
-- **レイアウト継承**: ベーステンプレートからの継承とセクション管理
-- **コンテキスト変数**: サイト設定、ページデータ、投稿リストへのアクセス
-- **カスタムフィルター**: 日付フォーマット、URL生成、抜粋作成
-
-#### 🔌 プラグインアーキテクチャ
-- **Sitemapプラグイン**: SEO最適化されたサイトマップ自動生成
-- **RSSプラグイン**: ブログ投稿のRSSフィード作成
-- **Minifyプラグイン**: HTML、CSS、JavaScriptの最小化
-- **画像最適化プラグイン**: レスポンシブ画像とWebP変換
-- **シンタックスハイライト**: コードブロックの美麗な表示
-
-#### 🛡️ セキュリティ機能
-- **XSS攻撃防止**: 危険なスクリプトタグとイベントハンドラーの検出・除去
-- **パストラバーサル保護**: ファイルパスの厳密な検証と不正アクセス防止
-- **入力サニタイゼーション**: HTMLコンテンツの安全な処理
-- **ファイルサイズ制限**: DoS攻撃防止のための制限機能
-- **セキュリティヘッダー**: 適切なHTTPセキュリティヘッダーの設定
-
-#### ⚡ パフォーマンス最適化
-- **並列処理**: マルチコアCPUを活用した高速処理
-- **メモリ効率**: ストリーミング処理による低メモリ使用量
-- **インテリジェントキャッシュ**: 依存関係を考慮した効率的なキャッシュ無効化
-- **ファイル監視最適化**: 効率的なファイルシステム監視
-
-#### 🔧 CLI インターフェース
-- **`serve`コマンド**: 開発サーバーの起動とライブリロード
-- **`build`コマンド**: 本番用ビルドと最適化
-- **`new`コマンド**: 新規記事・ページの雛形作成
-- **設定可能オプション**: 詳細なビルド設定とカスタマイズ
-
-#### 📊 ビルド統計とレポート
-- **ビルド時間測定**: パフォーマンス監視と最適化指標
-- **ファイル統計**: 処理されたファイル数と種類の詳細レポート
-- **キャッシュ効率**: ヒット率とミス率の統計情報
-- **出力サイズ分析**: 生成されたサイトのサイズ分析
-
-#### 🌐 多言語・国際化対応
-- **UTF-8サポート**: 多言語コンテンツの完全サポート
-- **ロケール設定**: 日付フォーマットと言語固有の処理
-- **文字エンコーディング**: 安全で一貫した文字処理
-
-### セキュリティ
-
-#### 🛡️ セキュリティ強化
-- **包括的XSS防止**: 40以上のHTML5イベントハンドラーの検出
-- **マルチライン攻撃対応**: 改行を含む攻撃パターンの検出
-- **ケースバリエーション対応**: 大文字小文字混在攻撃の検出
-- **Windows予約名保護**: CON、PRN、AUXなどのシステム予約名の検証
-- **制御文字検出**: null文字やDEL文字などの危険な制御文字の検出
-- **YAML安全性**: 危険なYAMLタグ（!!python/object等）の検出
-- **パストラバーサル強化**: より厳密なファイルパス検証
-
-### テスト
-
-#### ✅ 包括的テストスイート
-- **単体テスト**: 60以上のテストケースによる詳細な機能検証
-- **セキュリティテスト**: 30以上のセキュリティ特化テスト
-- **統合テスト**: コンポーネント間の連携テスト
-- **パフォーマンステスト**: ビルド時間とメモリ使用量の検証
-
-#### 🔍 テストカバレッジ
-- **SecurityValidator**: 20テストケース - XSS、パストラバーサル、入力検証
-- **SecurityValidatorAdvanced**: 10テストケース - エッジケース攻撃パターン
-- **PageModel**: 7テストケース - ページオブジェクトの作成と検証
-- **PostModel**: 9テストケース - ブログ記事の処理と日付パース
-- **MarkdownParser**: 15テストケース - Markdown解析とセキュリティ制限
-- **BuildEngine**: 主要なビルド機能の完全テスト
-
-### パフォーマンス
-
-#### ⚡ 最適化結果
-- **ビルド速度**: 中規模サイト（100ページ）で2秒以内
-- **メモリ使用量**: 128MB以下での安定動作
-- **キャッシュ効率**: 90%以上のキャッシュヒット率
-- **増分ビルド**: 変更検出による10倍高速化
-
-### ドキュメント
-
-#### 📚 完全なドキュメント
-- **README.md**: 包括的なプロジェクト説明とクイックスタート
-- **CONTRIBUTING.md**: 詳細なコントリビューションガイド
-- **セキュリティポリシー**: 脆弱性報告手順
-- **API ドキュメント**: JavaDocによる詳細なAPI説明
-
-### 技術詳細
-
-#### 🔧 アーキテクチャ
-- **言語**: Java 21（レコード型、パターンマッチング活用）
-- **ビルドツール**: Maven 3.9+
-- **依存関係**:
-  - CommonMark 0.21.0 - Markdown処理
-  - SnakeYAML 2.2 - YAML解析
-  - Jackson 2.16.1 - JSON処理
-  - SLF4J 2.0.9 + Logback 1.4.14 - ログ出力
-  - PicoCLI 4.7.5 - CLI インターフェース
-
-#### 📦 モジュール構成
-- **コアエンジン**: `com.javassg.build`
-- **セキュリティ**: `com.javassg.security`
-- **キャッシング**: `com.javassg.cache`
-- **モデル**: `com.javassg.model`
-- **パーサー**: `com.javassg.parser`
-- **プラグイン**: `com.javassg.plugin`
-- **CLI**: `com.javassg.cli`
-- **サーバー**: `com.javassg.server`
-
----
-
-## バージョニング規則
-
-このプロジェクトは[Semantic Versioning](https://semver.org/)に従います：
-
-- **MAJOR** (1.x.x): 後方互換性のない重大な変更
-- **MINOR** (x.1.x): 後方互換性のある機能追加
-- **PATCH** (x.x.1): 後方互換性のあるバグ修正
-
-## リリース情報
-
-各リリースには以下の情報が含まれます：
-
-- 📅 **リリース日**
-- 🎯 **対象バージョン**
-- ✨ **新機能**
-- 🔧 **改善**
-- 🐛 **バグ修正**
-- 🛡️ **セキュリティ更新**
-- ⚠️ **破壊的変更**
-- 📝 **ドキュメント更新**
-
----
-
-JavaSSGの発展にご協力いただき、ありがとうございます！
+### Planned
+- Native application packaging with jpackage
+- Additional template themes
+- Enhanced plugin system
+- Performance monitoring and metrics
+- Internationalization support
+- Advanced caching strategies

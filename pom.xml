@@ -119,8 +119,7 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>21</source>
-                    <target>21</target>
+                    <release>21</release>
                 </configuration>
             </plugin>
             
@@ -180,6 +179,40 @@
                         <phase>test</phase>
                         <goals>
                             <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- jpackage for native application packaging -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jpackage-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <name>JavaSSG</name>
+                    <appVersion>${project.version}</appVersion>
+                    <vendor>JavaSSG Team</vendor>
+                    <description>Java21ベースの高速で安全な静的サイトジェネレーター</description>
+                    <copyright>Copyright 2024 JavaSSG Team</copyright>
+                    <licenseFile>LICENSE</licenseFile>
+                    <mainJar>${project.build.finalName}.jar</mainJar>
+                    <mainClass>com.javassg.JavaSSG</mainClass>
+                    <type>app-image</type>
+                    <javaOptions>
+                        <option>-Dfile.encoding=UTF-8</option>
+                        <option>-Xmx512m</option>
+                    </javaOptions>
+                    <arguments>
+                        <argument>--help</argument>
+                    </arguments>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>package-app-image</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jpackage</goal>
                         </goals>
                     </execution>
                 </executions>
