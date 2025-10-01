@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPOutputStream;
 
@@ -49,22 +50,27 @@ public class DevServer {
     private int port = 8080;
     private Path outputDir;
     
-    // MIMEタイプマッピング
-    private static final Map<String, String> MIME_TYPES = Map.of(
-        ".html", "text/html; charset=utf-8",
-        ".css", "text/css; charset=utf-8",
-        ".js", "text/javascript; charset=utf-8",
-        ".json", "application/json; charset=utf-8",
-        ".png", "image/png",
-        ".jpg", "image/jpeg",
-        ".jpeg", "image/jpeg",
-        ".gif", "image/gif",
-        ".svg", "image/svg+xml",
-        ".ico", "image/x-icon"
-    );
-    
-    private static final Map<String, String> ADDITIONAL_MIME_TYPES = Map.of(
-        ".txt", "text/plain; charset=utf-8"
+    // 統合されたMIMEタイプマッピング
+    private static final Map<String, String> MIME_TYPES = Map.ofEntries(
+        Map.entry(".html", "text/html; charset=utf-8"),
+        Map.entry(".css", "text/css; charset=utf-8"),
+        Map.entry(".js", "text/javascript; charset=utf-8"),
+        Map.entry(".json", "application/json; charset=utf-8"),
+        Map.entry(".txt", "text/plain; charset=utf-8"),
+        Map.entry(".xml", "application/xml; charset=utf-8"),
+        Map.entry(".pdf", "application/pdf"),
+        Map.entry(".zip", "application/zip"),
+        Map.entry(".png", "image/png"),
+        Map.entry(".jpg", "image/jpeg"),
+        Map.entry(".jpeg", "image/jpeg"),
+        Map.entry(".gif", "image/gif"),
+        Map.entry(".svg", "image/svg+xml"),
+        Map.entry(".ico", "image/x-icon"),
+        Map.entry(".webp", "image/webp"),
+        Map.entry(".woff", "font/woff"),
+        Map.entry(".woff2", "font/woff2"),
+        Map.entry(".ttf", "font/ttf"),
+        Map.entry(".eot", "application/vnd.ms-fontobject")
     );
     
     public DevServer(SiteConfig siteConfig, BuildEngineInterface buildEngine) {
@@ -91,17 +97,44 @@ public class DevServer {
         
         try {
             httpServer = HttpServer.create(new InetSocketAddress(port), 0);
-            httpServer.setExecutor(Executors.newCachedThreadPool());
-            
+
+            // 制限されたスレッドプールを使用してリソースを管理
+            int maxThreads = Math.max(2, Runtime.getRuntime().availableProcessors() * 2);
+            java.util.concurrent.ThreadFactory threadFactory = new java.util.concurrent.ThreadFactory() {
+                private final AtomicInteger threadNumber = new AtomicInteger(1);
+
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread thread = new Thread(r, "DevServer-Worker-" + threadNumber.getAndIncrement());
+                    thread.setDaemon(true);
+                    thread.setPriority(Thread.NORM_PRIORITY - 1); // 少し低い優先度
+                    return thread;
+                }
+            };
+
+            java.util.concurrent.ThreadPoolExecutor executor = new java.util.concurrent.ThreadPoolExecutor(
+                Math.max(2, maxThreads / 4), // コアスレッド数
+                maxThreads,                   // 最大スレッド数
+                60L,                         // アイドル時間
+                java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.LinkedBlockingQueue<>(100), // キューサイズ制限
+                threadFactory,
+                new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy() // キューが満杯時の拒否ポリシー
+            );
+
+            httpServer.setExecutor(executor);
+
             // ハンドラーの設定
             httpServer.createContext("/", new StaticFileHandler());
             httpServer.createContext("/livereload", new LiveReloadHandler());
-            
+
             httpServer.start();
             running = true;
-            
+
             logger.info("開発サーバーを起動しました: http://localhost:{}", port);
-            
+            logger.debug("スレッドプール設定: コア={}, 最大={}",
+                executor.getCorePoolSize(), executor.getMaximumPoolSize());
+
         } catch (BindException e) {
             throw DevServerException.portInUse(port);
         } catch (IOException e) {
@@ -113,15 +146,42 @@ public class DevServer {
         if (!running) {
             return;
         }
-        
-        if (httpServer != null) {
-            httpServer.stop(1);
+
+        running = false; // 早期にフラグを設定
+
+        try {
+            // ライブリロードサービスを先に停止
+            liveReloadService.stopWatching();
+
+            if (httpServer != null) {
+                // スレッドプールのシャットダウンを確実に実行
+                java.util.concurrent.Executor executor = httpServer.getExecutor();
+                if (executor instanceof java.util.concurrent.ThreadPoolExecutor) {
+                    java.util.concurrent.ThreadPoolExecutor threadPool =
+                        (java.util.concurrent.ThreadPoolExecutor) executor;
+
+                    logger.debug("スレッドプールをシャットダウンします (実行中のタスク: {})",
+                        threadPool.getActiveCount());
+
+                    threadPool.shutdown();
+                    if (!threadPool.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                        logger.warn("スレッドプールのシャットダウンがタイムアウトしました。強制終了します。");
+                        threadPool.shutdownNow();
+                    }
+                }
+
+                // HTTPサーバーを停止
+                httpServer.stop(0); // 即時停止
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.warn("サーバー停止中に割り込みが発生しました");
+        } catch (Exception e) {
+            logger.error("サーバー停止中にエラーが発生しました", e);
+        } finally {
+            logger.info("開発サーバーを停止しました");
         }
-        
-        liveReloadService.stopWatching();
-        running = false;
-        
-        logger.info("開発サーバーを停止しました");
     }
     
     public boolean isRunning() {
@@ -214,8 +274,9 @@ public class DevServer {
                 exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
                 exchange.getResponseHeaders().set("X-Frame-Options", "DENY");
                 
-                // パストラバーサル攻撃の防止
-                if (path.contains("..") || path.contains("~")) {
+                // パストラバーサル攻撃の防止（強化版）
+                if (isPathTraversalAttack(path)) {
+                    logger.warn("パストラバーサル攻撃を検出しました: {}", path);
                     sendError(exchange, 400, "Bad Request");
                     return;
                 }
@@ -336,13 +397,64 @@ public class DevServer {
     private class LiveReloadHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            // WebSocket接続のハンドリング（簡易実装）
-            // 実際にはWebSocketライブラリを使用することを推奨
-            // このハンドラーは基本的なWebSocketアップグレードレスポンスのみ送信
+            String requestMethod = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
             
-            exchange.getResponseHeaders().set("Upgrade", "websocket");
-            exchange.getResponseHeaders().set("Connection", "Upgrade");
-            exchange.sendResponseHeaders(101, -1); // Switching Protocols
+            // WebSocketアップグレード要求のチェック
+            if ("GET".equals(requestMethod) && "/livereload".equals(path)) {
+                String upgrade = exchange.getRequestHeaders().getFirst("Upgrade");
+                String connection = exchange.getRequestHeaders().getFirst("Connection");
+                String key = exchange.getRequestHeaders().getFirst("Sec-WebSocket-Key");
+                String version = exchange.getRequestHeaders().getFirst("Sec-WebSocket-Version");
+                String origin = exchange.getRequestHeaders().getFirst("Origin");
+
+                // Originヘッダーの検証（CSRF対策）
+                if (!isValidOrigin(origin)) {
+                    logger.warn("不正なOriginからのWebSocket接続要求: {}", origin);
+                    exchange.sendResponseHeaders(403, -1); // Forbidden
+                    return;
+                }
+
+                // WebSocketハンドシェイクの検証
+                if ("websocket".equalsIgnoreCase(upgrade) &&
+                    connection != null && connection.toLowerCase().contains("upgrade") &&
+                    key != null && !key.isEmpty() &&
+                    "13".equals(version)) {
+                    
+                    // WebSocketレスポンスヘッダーの生成
+                    String acceptKey = generateWebSocketAccept(key);
+                    
+                    exchange.getResponseHeaders().set("Upgrade", "websocket");
+                    exchange.getResponseHeaders().set("Connection", "Upgrade");
+                    exchange.getResponseHeaders().set("Sec-WebSocket-Accept", acceptKey);
+                    exchange.sendResponseHeaders(101, -1); // Switching Protocols
+                    
+                    // クライアントをWebSocketセッションとして登録
+                    WebSocketSession session = new SimpleWebSocketSession(exchange, acceptKey);
+                    liveReloadService.addClient(session);
+                    
+                    logger.debug("WebSocketクライアントが接続しました: {}", acceptKey);
+                } else {
+                    // 不正なWebSocket要求
+                    exchange.sendResponseHeaders(400, -1);
+                }
+            } else {
+                // WebSocketエンドポイント以外の要求
+                exchange.sendResponseHeaders(404, -1);
+            }
+        }
+        
+        private String generateWebSocketAccept(String key) {
+            try {
+                String magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+                String combined = key + magic;
+                java.security.MessageDigest sha1 = java.security.MessageDigest.getInstance("SHA-1");
+                byte[] digest = sha1.digest(combined.getBytes());
+                return java.util.Base64.getEncoder().encodeToString(digest);
+            } catch (Exception e) {
+                logger.error("WebSocket Acceptキーの生成に失敗しました", e);
+                return "";
+            }
         }
     }
     
@@ -379,11 +491,8 @@ public class DevServer {
         String fileName = filePath.getFileName().toString();
         int lastDot = fileName.lastIndexOf('.');
         if (lastDot >= 0) {
-            String extension = fileName.substring(lastDot);
+            String extension = fileName.substring(lastDot).toLowerCase();
             String mimeType = MIME_TYPES.get(extension);
-            if (mimeType == null) {
-                mimeType = ADDITIONAL_MIME_TYPES.get(extension);
-            }
             return mimeType != null ? mimeType : "application/octet-stream";
         }
         return "application/octet-stream";
@@ -395,6 +504,102 @@ public class DevServer {
             gzipOut.write(data);
         }
         return baos.toByteArray();
+    }
+    
+    /**
+     * パストラバーサル攻撃を検出する強化版メソッド
+     */
+    private boolean isPathTraversalAttack(String path) {
+        if (path == null || path.isEmpty()) {
+            return false;
+        }
+
+        // 1. 基本的なパターン検証（最も一般的な攻撃）
+        String lowerPath = path.toLowerCase();
+
+        // 直接のパストラバーサル
+        if (path.contains("..")) {
+            return true;
+        }
+
+        // 2. 複数レベルのエンコーディング攻撃
+        String currentPath = path;
+        for (int i = 0; i < 3; i++) { // 最大3回デコード
+            try {
+                String decoded = java.net.URLDecoder.decode(currentPath, "UTF-8");
+                if (!decoded.equals(currentPath)) {
+                    currentPath = decoded;
+                    if (decoded.contains("..") ||
+                        decoded.contains("../") ||
+                        decoded.contains("..\\") ||
+                        decoded.contains("%2e%2e") ||
+                        decoded.startsWith("..")) {
+                        return true;
+                    }
+                } else {
+                    break;
+                }
+            } catch (Exception e) {
+                return true; // デコード失敗は攻撃とみなす
+            }
+        }
+
+        // 3. 16進エンコーディング攻撃
+        if (lowerPath.contains("%2e") || // . の16進
+            lowerPath.contains("%2f") || // / の16進
+            lowerPath.contains("%5c") || // \ の16進
+            lowerPath.contains("%c0%af") || // / のオーバーロンエンコーディング
+            lowerPath.contains("%c1%9c")) { // \ のオーバーロンエンコーディング
+            return true;
+        }
+
+        // 4. Unicodeエンコーディング攻撃
+        if (lowerPath.contains("\\u002e") || // . のUnicode
+            lowerPath.contains("\\u002f") || // / のUnicode
+            lowerPath.contains("\\u005c")) { // \ のUnicode
+            return true;
+        }
+
+        // 5. Windows特有の攻撃
+        if (lowerPath.matches(".*[a-z]:.*") || // ドライブ文字
+            lowerPath.contains("\\\\") || // UNCパス
+            lowerPath.contains("\\..\\") || // Windowsパス
+            lowerPath.contains("..\\\\") ||
+            lowerPath.contains("~") || // 短いファイル名
+            lowerPath.contains("$")) { // 環境変数
+            return true;
+        }
+
+        // 6. 路径正規化による検証
+        try {
+            Path normalizedPath = Paths.get(path).normalize();
+            String normalizedStr = normalizedPath.toString();
+
+            // 正規化後に絶対パスになる、または親ディレクトリを含む場合
+            if (normalizedPath.isAbsolute() ||
+                normalizedStr.startsWith("..") ||
+                normalizedStr.contains("../") ||
+                normalizedStr.contains("..\\") ||
+                normalizedPath.getNameCount() > 20) { // 過度に深いパス
+                return true;
+            }
+        } catch (Exception e) {
+            return true; // 無効なパスは攻撃とみなす
+        }
+
+        // 7. 制御文字やnullバイト
+        for (char c : path.toCharArray()) {
+            if (c < 32 || c == 127 || c == 0) {
+                return true;
+            }
+        }
+
+        // 8. 非常に長いパス（DoS対策）
+        if (path.length() > 255) {
+            return true;
+        }
+
+        return false;
     }
     
     private int getServerPort() {
@@ -411,5 +616,28 @@ public class DevServer {
         String outputDir = siteConfig.getOutputDirectory();
         return Paths.get(outputDir != null ? outputDir : "_site");
     }
-    
+
+    /**
+     * Originヘッダーを検証（CSRF対策）
+     */
+    private boolean isValidOrigin(String origin) {
+        // 開発環境ではローカルホストのみ許可
+        if (origin == null || origin.trim().isEmpty()) {
+            return false;
+        }
+
+        String lowerOrigin = origin.toLowerCase();
+        int port = getServerPort();
+
+        // 許可されたOriginパターン
+        return lowerOrigin.equals("http://localhost:" + port) ||
+               lowerOrigin.equals("https://localhost:" + port) ||
+               lowerOrigin.equals("http://127.0.0.1:" + port) ||
+               lowerOrigin.equals("https://127.0.0.1:" + port) ||
+               lowerOrigin.startsWith("http://localhost:") ||
+               lowerOrigin.startsWith("https://localhost:") ||
+               lowerOrigin.startsWith("http://127.0.0.1:") ||
+               lowerOrigin.startsWith("https://127.0.0.1:");
+    }
+
 }

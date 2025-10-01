@@ -27,6 +27,8 @@
         <jackson.version>2.16.1</jackson.version>
         <slf4j.version>2.0.9</slf4j.version>
         <logback.version>1.4.14</logback.version>
+        <!-- セキュリティ -->
+        <owasp-sanitizer.version>20220608.1</owasp-sanitizer.version>
     </properties>
 
     <dependencies>
@@ -80,6 +82,13 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
+        </dependency>
+        
+        <!-- Security -->
+        <dependency>
+            <groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
+            <artifactId>owasp-java-html-sanitizer</artifactId>
+            <version>${owasp-sanitizer.version}</version>
         </dependency>
 
         <!-- Test dependencies -->
@@ -182,6 +191,11 @@
                         </goals>
                     </execution>
                 </executions>
+                <configuration>
+                    <excludes>
+                        <exclude>java/net/http/**</exclude>
+                    </excludes>
+                </configuration>
             </plugin>
 
             <!-- jpackage for native application packaging -->

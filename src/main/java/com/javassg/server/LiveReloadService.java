@@ -24,6 +24,7 @@ public class LiveReloadService {
     
     private final Set<WebSocketSession> connections = new CopyOnWriteArraySet<>();
     private final Map<String, LocalDateTime> lastReloadTimes = new ConcurrentHashMap<>();
+    private final Map<String, Long> sessionLastActivity = new ConcurrentHashMap<>();
     private final AtomicLong totalConnections = new AtomicLong(0);
     private final AtomicLong messagesSent = new AtomicLong(0);
     private final AtomicLong reloadEvents = new AtomicLong(0);
@@ -35,14 +36,16 @@ public class LiveReloadService {
     private Consumer<Path> fileChangeListener;
     private int throttleDelayMs = 100;
     
-    public void addConnection(WebSocketSession session) {
+    public void addClient(WebSocketSession session) {
         connections.add(session);
+        sessionLastActivity.put(session.getId(), System.currentTimeMillis());
         totalConnections.incrementAndGet();
-        logger.debug("WebSocket接続を追加しました: {}", session.getId());
+        logger.debug("WebSocketクライアントを追加しました: {}", session.getId());
     }
     
     public void removeConnection(WebSocketSession session) {
         connections.remove(session);
+        sessionLastActivity.remove(session.getId());
         logger.debug("WebSocket接続を削除しました: {}", session.getId());
     }
     
@@ -83,6 +86,8 @@ public class LiveReloadService {
                 String response = createHelloResponse();
                 session.sendMessage(response);
                 messagesSent.incrementAndGet();
+                // メッセージ受信時もアクティビティを更新
+                sessionLastActivity.put(session.getId(), System.currentTimeMillis());
             } else {
                 logger.warn("未知のコマンド: {}", command);
             }
@@ -98,69 +103,104 @@ public class LiveReloadService {
         if (watching) {
             stopWatching();
         }
-        
+
         this.watchService = FileSystems.getDefault().newWatchService();
         this.watching = true;
-        
+
         registerDirectoryRecursively(directory);
-        
-        // テスト環境では簡単なポーリング方式を使用
+
+        // 高性能なWatchServiceベースの監視を使用
         Thread watchThread = new Thread(() -> {
-            Map<Path, Long> lastModified = new HashMap<>();
-            
             try {
+                // ファイル変更のキャッシュとスロットリング
+                Map<Path, Long> lastEventTime = new ConcurrentHashMap<>();
+                Set<Path> pendingEvents = ConcurrentHashMap.newKeySet();
+
                 while (watching) {
-                    // ディレクトリ内のファイルをチェック
                     try {
-                        Files.walkFileTree(directory, new SimpleFileVisitor<Path>() {
-                            @Override
-                            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                                String fileName = file.getFileName().toString();
-                                
-                                // 隠しファイルをスキップ
-                                if (fileName.startsWith(".")) {
-                                    return FileVisitResult.CONTINUE;
+                        WatchKey key = watchService.poll(1000, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+                        if (key != null) {
+                            List<WatchEvent<?>> events = key.pollEvents();
+                            Path watchedDir = (Path) key.watchable();
+
+                            for (WatchEvent<?> event : events) {
+                                WatchEvent.Kind<?> kind = event.kind();
+
+                                if (kind == StandardWatchEventKinds.OVERFLOW) {
+                                    // イベントオーバーフロー：フルスキャンを実行
+                                    handleFullScan(directory, lastEventTime, pendingEvents);
+                                    continue;
                                 }
-                                
-                                long currentModified = attrs.lastModifiedTime().toMillis();
-                                Long lastTime = lastModified.get(file);
-                                
-                                if (lastTime == null || currentModified > lastTime) {
-                                    // スロットリング
-                                    if (lastTime != null && (currentModified - lastTime) < throttleDelayMs) {
-                                        return FileVisitResult.CONTINUE;
-                                    }
-                                    
-                                    lastModified.put(file, currentModified);
-                                    
+
+                                Path changedFile = watchedDir.resolve((Path) event.context());
+
+                                // 隠しファイルを無視
+                                if (changedFile.getFileName().toString().startsWith(".")) {
+                                    continue;
+                                }
+
+                                // ディレクトリの場合は登録
+                                if (kind == StandardWatchEventKinds.ENTRY_CREATE &&
+                                    Files.isDirectory(changedFile)) {
+                                    registerDirectoryRecursively(changedFile);
+                                }
+
+                                // スロットリングと重複排除
+                                long currentTime = System.currentTimeMillis();
+                                Long lastTime = lastEventTime.get(changedFile);
+
+                                if (lastTime == null || (currentTime - lastTime) > throttleDelayMs) {
+                                    lastEventTime.put(changedFile, currentTime);
+
+                                    // 非同期処理でファイル変更を通知
                                     if (fileChangeListener != null && lastTime != null) {
-                                        fileChangeListener.accept(file);
+                                        pendingEvents.add(changedFile);
+
+                                        // 少し遅延してバッチ処理
+                                        java.util.concurrent.ScheduledExecutorService scheduler =
+                                            java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+                                        scheduler.schedule(() -> {
+                                            Set<Path> eventsToProcess = new HashSet<>(pendingEvents);
+                                            pendingEvents.clear();
+
+                                            for (Path file : eventsToProcess) {
+                                                try {
+                                                    fileChangeListener.accept(file);
+                                                    logger.debug("ファイル変更を検知: {}", file);
+                                                } catch (Exception e) {
+                                                    logger.error("ファイル変更処理エラー: {}", file, e);
+                                                }
+                                            }
+                                        }, throttleDelayMs / 2, java.util.concurrent.TimeUnit.MILLISECONDS);
+                                        scheduler.shutdown();
                                     }
-                                    
-                                    logger.debug("ファイル変更を検知: {}", file);
                                 }
-                                
-                                return FileVisitResult.CONTINUE;
                             }
-                        });
-                    } catch (IOException e) {
-                        logger.error("ファイル監視エラー", e);
+
+                            // WatchKeyをリセットして監視を継続
+                            boolean valid = key.reset();
+                            if (!valid) {
+                                logger.warn("WatchKeyが無効になりました: {}", watchedDir);
+                            }
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
                     }
-                    
-                    Thread.sleep(throttleDelayMs);
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                logger.info("ファイル監視が中断されました");
             } catch (Exception e) {
-                logger.error("ファイル監視エラー", e);
+                logger.error("ファイル監視で致命的なエラーが発生しました", e);
+            } finally {
+                logger.info("ファイル監視が終了しました");
             }
         });
-        
+
         watchThread.setDaemon(true);
+        watchThread.setName("LiveReloadFileWatcher");
         watchThread.start();
-        
-        logger.info("ファイル監視を開始しました: {}", directory);
+
+        logger.info("WatchServiceベースのファイル監視を開始しました: {}", directory);
     }
     
     public void stopWatching() {
@@ -203,29 +243,75 @@ public class LiveReloadService {
     
     public void cleanupConnections() {
         List<WebSocketSession> toRemove = new ArrayList<>();
+        int closedCount = 0;
+
         for (WebSocketSession session : connections) {
-            if (session.isClosed()) {
-                toRemove.add(session);
+            try {
+                if (session.isClosed()) {
+                    toRemove.add(session);
+                    closedCount++;
+
+                    // セッションのリソースを確実に解放
+                    try {
+                        session.close();
+                    } catch (Exception e) {
+                        logger.debug("セッションクローズ時にエラー: {}", e.getMessage());
+                    }
+                } else {
+                    // タイムアウトチェック（長時間無活動な接続を削除）
+                    long lastActivityTime = getLastActivityTime(session);
+                    long currentTime = System.currentTimeMillis();
+                    long inactiveTime = currentTime - lastActivityTime;
+
+                    // 30分以上無活動な接続をクローズ
+                    if (inactiveTime > 30 * 60 * 1000) {
+                        logger.debug("タイムアウトにより接続をクローズ: {}", session.getId());
+                        try {
+                            session.close();
+                            toRemove.add(session);
+                            closedCount++;
+                        } catch (Exception e) {
+                            logger.debug("タイムアウトセッションのクローズエラー: {}", e.getMessage());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.error("接続状態確認中にエラーが発生しました: {}", session.getId(), e);
+                toRemove.add(session); // 異常な接続は削除対象
             }
         }
+
+        // 切断された接続を削除
         for (WebSocketSession session : toRemove) {
             connections.remove(session);
+        }
+
+        if (closedCount > 0) {
+            logger.debug("{}個のWebSocket接続をクリーンアップしました", closedCount);
         }
     }
     
     private void broadcast(String message) {
         List<WebSocketSession> toRemove = new ArrayList<>();
         for (WebSocketSession session : connections) {
-            if (session.isClosed()) {
-                toRemove.add(session);
-            } else {
-                session.sendMessage(message);
-                messagesSent.incrementAndGet();
+            try {
+                if (session.isClosed()) {
+                    toRemove.add(session);
+                } else {
+                    session.sendMessage(message);
+                    messagesSent.incrementAndGet();
+                    // アクティビティタイムスタンプを更新
+                    sessionLastActivity.put(session.getId(), System.currentTimeMillis());
+                }
+            } catch (Exception e) {
+                logger.error("メッセージ送信エラー: {}", session.getId(), e);
+                toRemove.add(session); // 送信失敗した接続は削除
             }
         }
-        // 切断されたセッションを削除
+        // 切断された接続を削除
         for (WebSocketSession session : toRemove) {
             connections.remove(session);
+            sessionLastActivity.remove(session.getId());
         }
     }
     
@@ -288,7 +374,7 @@ public class LiveReloadService {
         if (!Files.exists(dir)) {
             return;
         }
-        
+
         Files.walkFileTree(dir, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs) throws IOException {
@@ -299,5 +385,70 @@ public class LiveReloadService {
                 return FileVisitResult.CONTINUE;
             }
         });
+    }
+
+    /**
+     * イベントオーバーフロー時のフルスキャン処理
+     */
+    private void handleFullScan(Path directory, Map<Path, Long> lastEventTime, Set<Path> pendingEvents) {
+        try {
+            logger.debug("イベントオーバーフローによりフルスキャンを実行します: {}", directory);
+
+            Files.walkFileTree(directory, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    try {
+                        String fileName = file.getFileName().toString();
+
+                        // 隠しファイルをスキップ
+                        if (fileName.startsWith(".")) {
+                            return FileVisitResult.CONTINUE;
+                        }
+
+                        long currentTime = System.currentTimeMillis();
+                        Long lastTime = lastEventTime.get(file);
+
+                        // ファイルが変更されているかチェック
+                        if (lastTime == null || attrs.lastModifiedTime().toMillis() > lastTime) {
+                            lastEventTime.put(file, currentTime);
+
+                            if (fileChangeListener != null && lastTime != null) {
+                                pendingEvents.add(file);
+                            }
+                        }
+
+                        return FileVisitResult.CONTINUE;
+                    } catch (Exception e) {
+                        logger.error("フルスキャン中のファイル処理エラー: {}", file, e);
+                        return FileVisitResult.CONTINUE;
+                    }
+                }
+            });
+
+            // 保留中のイベントを処理
+            if (!pendingEvents.isEmpty() && fileChangeListener != null) {
+                Set<Path> eventsToProcess = new HashSet<>(pendingEvents);
+                pendingEvents.clear();
+
+                for (Path file : eventsToProcess) {
+                    try {
+                        fileChangeListener.accept(file);
+                        logger.debug("フルスキャンでファイル変更を検知: {}", file);
+                    } catch (Exception e) {
+                        logger.error("フルスキャンでのファイル変更処理エラー: {}", file, e);
+                    }
+                }
+            }
+
+        } catch (IOException e) {
+            logger.error("フルスキャン実行中にエラーが発生しました", e);
+        }
+    }
+
+    /**
+     * セッションの最終アクティビティ時刻を取得
+     */
+    private long getLastActivityTime(WebSocketSession session) {
+        return sessionLastActivity.getOrDefault(session.getId(), System.currentTimeMillis());
     }
 }

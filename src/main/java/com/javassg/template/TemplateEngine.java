@@ -4,409 +4,207 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.function.BiFunction;
 
 public class TemplateEngine {
     private static final int MAX_TEMPLATE_SIZE = 1024 * 1024; // 1MB
     private static final int MAX_NESTING_DEPTH = 50;
     
-    private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\{\\{([^}]+)\\}\\}");
-    private static final Pattern CONDITIONAL_PATTERN = Pattern.compile("\\{\\{#(if|unless)\\s+([^}]+)\\}\\}(.*?)(?:\\{\\{else\\}\\}(.*?))?\\{\\{/\\1\\}\\}", Pattern.DOTALL);
-    private static final Pattern LOOP_PATTERN = Pattern.compile("\\{\\{#each\\s+([^}]+)\\}\\}(.*?)\\{\\{/each\\}\\}", Pattern.DOTALL);
-    private static final Pattern PARTIAL_PATTERN = Pattern.compile("\\{\\{>\\s*([^}]+)\\}\\}");
-    private static final Pattern BLOCK_PATTERN = Pattern.compile("\\{\\{#block\\s+([^}]+)\\}\\}(.*?)\\{\\{/block\\}\\}", Pattern.DOTALL);
-    private static final Pattern EXTENDS_PATTERN = Pattern.compile("\\{\\{#extends\\s+\"([^\"]+)\"\\}\\}(.*?)\\{\\{/extends\\}\\}", Pattern.DOTALL);
-    
-    private final Map<String, String> partials = new ConcurrentHashMap<>();
-    private final Map<String, String> layouts = new ConcurrentHashMap<>();
-    private final Map<String, BiFunction<Object, String[], Object>> filters = new ConcurrentHashMap<>();
-    private final Map<String, String> templateCache = new ConcurrentHashMap<>();
+    private final Map<String, String> templates = new ConcurrentHashMap<>();
+    private final Map<String, BiFunction<Object, String[], Object>> customFilters = new ConcurrentHashMap<>();
     
     public TemplateEngine() {
-        registerBuiltinFilters();
+        registerCustomFilters();
     }
     
-    public String render(String template, Map<String, Object> context) {
-        validateTemplate(template);
-        return render(template, context, 0, new HashSet<>());
+    public String render(String templateName, Map<String, Object> context) {
+        try {
+            validateTemplate(templateName);
+            String templateContent = templates.getOrDefault(templateName, templateName);
+            
+            // 簡易テンプレートレンダリング
+            return renderTemplate(templateContent, context, 0, new HashSet<>());
+        } catch (Exception e) {
+            throw new TemplateException("テンプレートのレンダリングに失敗しました: " + e.getMessage(), e);
+        }
     }
     
-    private void validateTemplate(String template) {
-        if (template.length() > MAX_TEMPLATE_SIZE) {
+    public void addTemplate(String name, String content) {
+        validateTemplateContent(content);
+        templates.put(name, content);
+    }
+    
+    private void validateTemplate(String templateName) {
+        if (templateName == null || templateName.trim().isEmpty()) {
+            throw new TemplateException("テンプレート名は必須です");
+        }
+    }
+    
+    private void validateTemplateContent(String content) {
+        if (content.length() > MAX_TEMPLATE_SIZE) {
             throw new TemplateException("テンプレートサイズが制限を超えています");
         }
         
-        // 基本的な構文チェック
-        long ifCount = template.chars().mapToObj(c -> (char) c).map(String::valueOf)
-            .collect(StringBuilder::new, StringBuilder::append, StringBuilder::append)
-            .toString().split("\\{\\{#if").length - 1;
-        long endIfCount = template.chars().mapToObj(c -> (char) c).map(String::valueOf)
-            .collect(StringBuilder::new, StringBuilder::append, StringBuilder::append)
-            .toString().split("\\{\\{/if\\}\\}").length - 1;
-        
-        if (ifCount != endIfCount) {
-            throw new TemplateException("構文エラー: if文が正しく閉じられていません");
+        if (content.trim().isEmpty()) {
+            throw new TemplateException("テンプレートコンテンツが空です");
         }
     }
     
-    private String render(String template, Map<String, Object> context, int depth, Set<String> visitedPartials) {
-        if (template.length() > MAX_TEMPLATE_SIZE) {
-            throw new TemplateException("テンプレートサイズが制限を超えています");
-        }
-        
+    private String renderTemplate(String template, Map<String, Object> context, int depth, Set<String> visited) {
         if (depth > MAX_NESTING_DEPTH) {
             throw new TemplateException("ネストが深すぎます");
         }
         
         String result = template;
         
-        // Layout extension処理
-        result = processExtends(result, context, depth, visitedPartials);
+        // 変数置換
+        result = replaceVariables(result, context);
         
-        // 条件分岐の処理
-        result = processConditionals(result, context, depth, visitedPartials);
+        // 簡易if文処理
+        result = processIfStatements(result, context);
         
-        // ループの処理
-        result = processLoops(result, context, depth, visitedPartials);
-        
-        // パーシャルの処理
-        result = processPartials(result, context, depth, visitedPartials);
-        
-        // 変数の置換
-        result = processVariables(result, context);
+        // 簡易ループ処理
+        result = processLoops(result, context);
         
         return result;
     }
     
-    private String processExtends(String input, Map<String, Object> context, int depth, Set<String> visitedPartials) {
-        Matcher matcher = EXTENDS_PATTERN.matcher(input);
-        if (!matcher.find()) {
-            return input;
-        }
+    private String replaceVariables(String template, Map<String, Object> context) {
+        String result = template;
         
-        String layoutName = matcher.group(1);
-        String childContent = matcher.group(2);
-        
-        String layoutTemplate = layouts.get(layoutName);
-        if (layoutTemplate == null) {
-            throw new TemplateException("レイアウトが見つかりません: " + layoutName);
-        }
-        
-        // 子テンプレートからブロックを抽出
-        Map<String, String> blocks = extractBlocks(childContent);
-        
-        // レイアウトテンプレートのブロックを置換
-        return replaceBlocks(layoutTemplate, blocks, context, depth, visitedPartials);
-    }
-    
-    private Map<String, String> extractBlocks(String content) {
-        Map<String, String> blocks = new HashMap<>();
-        Matcher matcher = BLOCK_PATTERN.matcher(content);
+        // {{variable}} 形式の変数を置換
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\{\\{([^}]+)\\}\\}");
+        java.util.regex.Matcher matcher = pattern.matcher(result);
+        StringBuffer sb = new StringBuffer();
         
         while (matcher.find()) {
-            String blockName = matcher.group(1).trim();
-            String blockContent = matcher.group(2);
-            blocks.put(blockName, blockContent);
+            String variable = matcher.group(1).trim();
+            Object value = getValueFromContext(variable, context);
+            String replacement = value != null ? value.toString() : "";
+            matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
         }
+        matcher.appendTail(sb);
         
-        return blocks;
+        return sb.toString();
     }
     
-    private String replaceBlocks(String template, Map<String, String> blocks, 
-                                Map<String, Object> context, int depth, Set<String> visitedPartials) {
-        Matcher matcher = BLOCK_PATTERN.matcher(template);
-        StringBuffer result = new StringBuffer();
-        
-        while (matcher.find()) {
-            String blockName = matcher.group(1).trim();
-            String defaultContent = matcher.group(2);
-            
-            String blockContent = blocks.getOrDefault(blockName, defaultContent);
-            String renderedBlock = render(blockContent, context, depth + 1, visitedPartials);
-            
-            matcher.appendReplacement(result, Matcher.quoteReplacement(renderedBlock));
-        }
-        matcher.appendTail(result);
-        
-        return result.toString();
-    }
-    
-    private String processConditionals(String input, Map<String, Object> context, int depth, Set<String> visitedPartials) {
-        Matcher matcher = CONDITIONAL_PATTERN.matcher(input);
-        StringBuffer result = new StringBuffer();
-        
-        while (matcher.find()) {
-            String operator = matcher.group(1); // "if" or "unless"
-            String condition = matcher.group(2).trim();
-            String ifContent = matcher.group(3);
-            String elseContent = matcher.group(4);
-            
-            boolean conditionResult = evaluateCondition(condition, context);
-            if ("unless".equals(operator)) {
-                conditionResult = !conditionResult;
-            }
-            
-            String replacement = conditionResult ? ifContent : (elseContent != null ? elseContent : "");
-            String renderedReplacement = render(replacement, context, depth + 1, visitedPartials);
-            
-            matcher.appendReplacement(result, Matcher.quoteReplacement(renderedReplacement));
-        }
-        matcher.appendTail(result);
-        
-        return result.toString();
-    }
-    
-    private String processLoops(String input, Map<String, Object> context, int depth, Set<String> visitedPartials) {
-        // 最も内側のループから処理するため、文字列を逆順で処理
-        String result = input;
-        
-        while (true) {
-            Matcher matcher = LOOP_PATTERN.matcher(result);
-            if (!matcher.find()) {
-                break;
-            }
-            
-            // 最初に見つかったループを処理
-            String arrayName = matcher.group(1).trim();
-            String loopContent = matcher.group(2);
-            
-            Object arrayValue = getNestedValue(arrayName, context);
-            StringBuilder loopResult = new StringBuilder();
-            
-            if (arrayValue instanceof Iterable<?> iterable) {
-                for (Object item : iterable) {
-                    Map<String, Object> loopContext = new HashMap<>(context);
-                    if (item instanceof Map<?, ?> map) {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> itemMap = (Map<String, Object>) map;
-                        loopContext.putAll(itemMap);
-                    }
-                    loopContext.put("this", item);
-                    
-                    // ネストしたループがある場合は再帰的に処理
-                    String itemContent = loopContent;
-                    if (LOOP_PATTERN.matcher(itemContent).find()) {
-                        itemContent = processLoops(itemContent, loopContext, depth + 1, visitedPartials);
-                    }
-                    itemContent = processVariables(itemContent, loopContext);
-                    loopResult.append(itemContent);
-                }
-            }
-            
-            result = result.substring(0, matcher.start()) + 
-                    loopResult.toString() + 
-                    result.substring(matcher.end());
-        }
-        
-        return result;
-    }
-    
-    private String processPartials(String input, Map<String, Object> context, int depth, Set<String> visitedPartials) {
-        Matcher matcher = PARTIAL_PATTERN.matcher(input);
-        StringBuffer result = new StringBuffer();
-        
-        while (matcher.find()) {
-            String partialName = matcher.group(1).trim();
-            
-            if (visitedPartials.contains(partialName)) {
-                throw new TemplateException("循環参照が検出されました: " + partialName);
-            }
-            
-            String partialTemplate = partials.get(partialName);
-            if (partialTemplate == null) {
-                throw new TemplateException("パーシャルが見つかりません: " + partialName);
-            }
-            
-            Set<String> newVisitedPartials = new HashSet<>(visitedPartials);
-            newVisitedPartials.add(partialName);
-            
-            String renderedPartial = render(partialTemplate, context, depth + 1, newVisitedPartials);
-            matcher.appendReplacement(result, Matcher.quoteReplacement(renderedPartial));
-        }
-        matcher.appendTail(result);
-        
-        return result.toString();
-    }
-    
-    private String processVariables(String input, Map<String, Object> context) {
-        Matcher matcher = VARIABLE_PATTERN.matcher(input);
-        StringBuffer result = new StringBuffer();
-        
-        while (matcher.find()) {
-            String expression = matcher.group(1).trim();
-            
-            // ブロックヘルパーでない場合のみ処理
-            if (!expression.startsWith("#") && !expression.startsWith("/") && !expression.startsWith(">")) {
-                String replacement = processExpression(expression, context);
-                matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
-            } else {
-                matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(0)));
-            }
-        }
-        matcher.appendTail(result);
-        
-        return result.toString();
-    }
-    
-    private String processExpression(String expression, Map<String, Object> context) {
-        // フィルターの処理
-        if (expression.contains("|")) {
-            String[] parts = expression.split("\\|");
-            String variableName = parts[0].trim();
-            Object value = getNestedValue(variableName, context);
-            
-            // フィルターチェーンを適用
-            for (int i = 1; i < parts.length; i++) {
-                String filterExpression = parts[i].trim();
-                value = applyFilter(value, filterExpression);
-            }
-            
-            return value != null ? value.toString() : "";
-        }
-        
-        // 通常の変数
-        Object value = getNestedValue(expression, context);
-        return value != null ? value.toString() : "";
-    }
-    
-    private Object getNestedValue(String path, Map<String, Object> context) {
+    private Object getValueFromContext(String path, Map<String, Object> context) {
         String[] parts = path.split("\\.");
         Object current = context;
         
         for (String part : parts) {
-            if (current instanceof Map<?, ?> map) {
-                current = map.get(part);
-            } else {
-                return null;
+            if (current instanceof Map) {
+                current = ((Map<?, ?>) current).get(part);
+            } else if (current != null) {
+                // オブジェクトのプロパティアクセスは簡易的にスキップ
+                current = null;
+            }
+            
+            if (current == null) {
+                break;
             }
         }
         
         return current;
     }
     
-    private boolean evaluateCondition(String condition, Map<String, Object> context) {
-        Object value = getNestedValue(condition, context);
+    private String processIfStatements(String template, Map<String, Object> context) {
+        // 簡易的なif文処理 - {{#if variable}}content{{/if}}
+        java.util.regex.Pattern ifPattern = java.util.regex.Pattern.compile(
+            "\\{\\{#if\\s+([^}]+)\\}\\}(.*?)\\{\\{/if\\}\\}", java.util.regex.Pattern.DOTALL);
         
-        if (value instanceof Boolean bool) {
-            return bool;
-        }
-        if (value instanceof String str) {
-            return !str.isEmpty();
-        }
-        if (value instanceof Number num) {
-            return num.doubleValue() != 0;
-        }
-        if (value instanceof Collection<?> coll) {
-            return !coll.isEmpty();
+        String result = template;
+        java.util.regex.Matcher matcher = ifPattern.matcher(result);
+        
+        while (matcher.find()) {
+            String condition = matcher.group(1).trim();
+            String content = matcher.group(2);
+            
+            Object value = getValueFromContext(condition, context);
+            boolean shouldInclude = isTruthy(value);
+            
+            String replacement = shouldInclude ? content : "";
+            result = result.replace(matcher.group(0), replacement);
+            
+            //matcherをリセットして再検索
+            matcher = ifPattern.matcher(result);
         }
         
-        return value != null;
+        return result;
     }
     
-    private Object applyFilter(Object value, String filterExpression) {
-        String[] parts = filterExpression.split(":", 2);
-        String filterName = parts[0].trim();
-        String[] args = parts.length > 1 ? 
-            parts[1].trim().replace("'", "").split(",") : new String[0];
+    private String processLoops(String template, Map<String, Object> context) {
+        // 簡易的なループ処理 - {{#each items}}{{this}}{{/each}}
+        java.util.regex.Pattern eachPattern = java.util.regex.Pattern.compile(
+            "\\{\\{#each\\s+([^}]+)\\}\\}(.*?)\\{\\{/each\\}\\}", java.util.regex.Pattern.DOTALL);
         
-        BiFunction<Object, String[], Object> filter = filters.get(filterName);
-        if (filter != null) {
-            return filter.apply(value, args);
-        }
+        String result = template;
+        java.util.regex.Matcher matcher = eachPattern.matcher(result);
         
-        // 内蔵フィルター
-        return switch (filterName) {
-            case "uppercase" -> value != null ? value.toString().toUpperCase() : "";
-            case "lowercase" -> value != null ? value.toString().toLowerCase() : "";
-            case "capitalize" -> capitalize(value);
-            default -> value != null ? value.toString() : "";
-        };
-    }
-    
-    private String capitalize(Object value) {
-        if (value == null) return "";
-        String str = value.toString();
-        if (str.isEmpty()) return str;
-        return Character.toUpperCase(str.charAt(0)) + str.substring(1).toLowerCase();
-    }
-    
-    private void registerBuiltinFilters() {
-        // 日付フィルター
-        filters.put("date", (value, args) -> {
-            if (value instanceof LocalDateTime dateTime) {
-                String pattern = args.length > 0 ? args[0] : "yyyy-MM-dd";
-                try {
-                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
-                    return dateTime.format(formatter);
-                } catch (Exception e) {
-                    return value.toString();
+        while (matcher.find()) {
+            String variable = matcher.group(1).trim();
+            String content = matcher.group(2);
+            
+            Object value = getValueFromContext(variable, context);
+            StringBuilder loopOutput = new StringBuilder();
+            
+            if (value instanceof Iterable) {
+                for (Object item : (Iterable<?>) value) {
+                    Map<String, Object> loopContext = new HashMap<>(context);
+                    loopContext.put("this", item);
+                    
+                    String itemContent = replaceVariables(content, loopContext);
+                    loopOutput.append(itemContent);
                 }
             }
-            return value != null ? value.toString() : "";
-        });
+            
+            result = result.replace(matcher.group(0), loopOutput.toString());
+            matcher = eachPattern.matcher(result);
+        }
         
-        // スラグ化フィルター
-        filters.put("slugify", (value, args) -> {
-            if (value == null) return "";
-            return value.toString()
-                .toLowerCase()
-                .replace("テスト", "tesuto")
-                .replace("タイトル", "taitoru")
-                .replace(" ", "-")
-                .replaceAll("[^a-z0-9\\-_]", "-")
-                .replaceAll("-+", "-")
-                .replaceAll("^-|-$", "");
-        });
-        
-        // 切り詰めフィルター
-        filters.put("truncate", (value, args) -> {
-            if (value == null) return "";
-            String str = value.toString();
-            if (args.length > 0) {
-                try {
-                    int length = Integer.parseInt(args[0]);
-                    if (str.length() <= length) {
-                        return str;
-                    }
-                    return str.substring(0, length) + "...";
-                } catch (NumberFormatException e) {
-                    return str;
-                }
+        return result;
+    }
+    
+    private boolean isTruthy(Object value) {
+        if (value == null) return false;
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Collection) return !((Collection<?>) value).isEmpty();
+        if (value instanceof String) return !((String) value).isEmpty();
+        return true;
+    }
+    
+    private void registerCustomFilters() {
+        customFilters.put("date", (input, args) -> {
+            if (input instanceof LocalDateTime) {
+                LocalDateTime dateTime = (LocalDateTime) input;
+                String format = args.length > 0 ? args[0] : "yyyy-MM-dd";
+                return dateTime.format(DateTimeFormatter.ofPattern(format));
             }
-            return str;
+            return input;
         });
         
-        // Markdownフィルター
-        filters.put("markdown", (value, args) -> {
-            // 簡単なMarkdown処理（実際はMarkdownパーサーを使用）
-            if (value == null) return "";
-            return value.toString()
-                .replaceAll("\\*\\*(.*?)\\*\\*", "<strong>$1</strong>")
-                .replaceAll("\\*(.*?)\\*", "<em>$1</em>");
+        customFilters.put("excerpt", (input, args) -> {
+            if (input instanceof String) {
+                String text = (String) input;
+                int length = args.length > 0 ? Integer.parseInt(args[0]) : 150;
+                if (text.length() <= length) {
+                    return text;
+                }
+                return text.substring(0, length).trim() + "...";
+            }
+            return input;
         });
         
-        // HTMLタグ除去フィルター
-        filters.put("strip_html", (value, args) -> {
-            if (value == null) return "";
-            return value.toString().replaceAll("<[^>]+>", "");
+        customFilters.put("slugify", (input, args) -> {
+            if (input instanceof String) {
+                String text = (String) input;
+                return text.toLowerCase()
+                    .replaceAll("[^a-z0-9\\s-]", "")
+                    .replaceAll("\\s+", "-")
+                    .replaceAll("-+", "-")
+                    .replaceAll("^-|-$", "");
+            }
+            return input;
         });
-    }
-    
-    public void registerPartial(String name, String template) {
-        partials.put(name, template);
-    }
-    
-    public void registerLayout(String name, String template) {
-        layouts.put(name, template);
-    }
-    
-    public void registerFilter(String name, BiFunction<Object, String[], Object> filter) {
-        filters.put(name, filter);
-    }
-    
-    public void clearCache() {
-        templateCache.clear();
     }
 }

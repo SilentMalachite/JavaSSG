@@ -195,27 +195,86 @@ public class BuildCommand {
     }
     
     private void startWatchMode(BuildEngineInterface buildEngine, BuildOptions options) {
-        // ウォッチモードの実装（簡易版）
-        Thread watchThread = new Thread(() -> {
-            try {
-                while (!Thread.currentThread().isInterrupted()) {
-                    Thread.sleep(1000);
-                    // 実際の実装では、ファイル変更監視を行う
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
+        System.out.println("ファイル監視を開始します。Ctrl+Cで停止します。");
         
-        watchThread.setDaemon(true);
-        watchThread.start();
-        
-        // Ctrl+C待機
         try {
-            Thread.currentThread().join();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            java.nio.file.WatchService watchService = java.nio.file.FileSystems.getDefault().newWatchService();
+            java.util.concurrent.ConcurrentHashMap<java.nio.file.WatchKey, Path> keys = new java.util.concurrent.ConcurrentHashMap<>();
+            
+            // 監視対象ディレクトリの登録
+            Path contentDir = java.nio.file.Paths.get("content");
+            Path templatesDir = java.nio.file.Paths.get("templates");
+            Path staticDir = java.nio.file.Paths.get("static");
+            
+            registerDirectory(watchService, keys, contentDir);
+            registerDirectory(watchService, keys, templatesDir);
+            registerDirectory(watchService, keys, staticDir);
+            
+            while (!Thread.currentThread().isInterrupted()) {
+                java.nio.file.WatchKey key;
+                try {
+                    key = watchService.take();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+                
+                Path dir = keys.get(key);
+                if (dir == null) {
+                    continue;
+                }
+                
+                for (java.nio.file.WatchEvent<?> event : key.pollEvents()) {
+                    java.nio.file.WatchEvent.Kind<?> kind = event.kind();
+                    
+                    if (kind == java.nio.file.StandardWatchEventKinds.OVERFLOW) {
+                        continue;
+                    }
+                    
+                    @SuppressWarnings("unchecked")
+                    java.nio.file.WatchEvent<Path> pathEvent = (java.nio.file.WatchEvent<Path>) event;
+                    Path fileName = pathEvent.context();
+                    Path fullPath = dir.resolve(fileName);
+                    
+                    System.out.println("ファイル変更を検出: " + fullPath + " (" + kind + ")");
+                    
+                    try {
+                        // 自動再構築
+                        buildEngine.build();
+                        System.out.println("再構築完了");
+                    } catch (Exception e) {
+                        System.err.println("再構築エラー: " + e.getMessage());
+                    }
+                }
+                
+                boolean valid = key.reset();
+                if (!valid) {
+                    keys.remove(key);
+                    if (keys.isEmpty()) {
+                        break;
+                    }
+                }
+            }
+            
+            watchService.close();
+        } catch (Exception e) {
+            System.err.println("ファイル監視エラー: " + e.getMessage());
         }
+    }
+    
+    private void registerDirectory(java.nio.file.WatchService watchService, 
+                                   java.util.concurrent.ConcurrentHashMap<java.nio.file.WatchKey, Path> keys, 
+                                   Path dir) throws java.io.IOException {
+        if (!java.nio.file.Files.exists(dir)) {
+            return;
+        }
+        
+        java.nio.file.WatchKey key = dir.register(watchService,
+            java.nio.file.StandardWatchEventKinds.ENTRY_CREATE,
+            java.nio.file.StandardWatchEventKinds.ENTRY_DELETE,
+            java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY);
+        
+        keys.put(key, dir);
     }
     
     private void showHelp() {

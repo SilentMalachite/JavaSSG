@@ -23,7 +23,9 @@ class ServeCommandTest {
 
     private ServeCommand serveCommand;
     private ByteArrayOutputStream outputStream;
+    private ByteArrayOutputStream errorStream;
     private PrintStream originalOut;
+    private PrintStream originalErr;
     
     @Mock
     private BuildEngineInterface buildEngine;
@@ -36,8 +38,11 @@ class ServeCommandTest {
         MockitoAnnotations.openMocks(this);
         serveCommand = new ServeCommand();
         outputStream = new ByteArrayOutputStream();
+        errorStream = new ByteArrayOutputStream();
         originalOut = System.out;
+        originalErr = System.err;
         System.setOut(new PrintStream(outputStream));
+        System.setErr(new PrintStream(errorStream));
         
         setupTestProject();
     }
@@ -45,6 +50,7 @@ class ServeCommandTest {
     @AfterEach
     void tearDown() {
         System.setOut(originalOut);
+        System.setErr(originalErr);
     }
 
     @Test
@@ -56,8 +62,8 @@ class ServeCommandTest {
         // サーバーが正常に起動を試行したことを確認（実際のサーバーは起動しない）
         assertThat(exitCode).isEqualTo(1); // 出力ディレクトリが存在しないためエラー
         
-        String output = outputStream.toString();
-        assertThat(output).contains("出力ディレクトリが存在しません");
+        String error = errorStream.toString();
+        assertThat(error).contains("出力ディレクトリが存在しません");
     }
 
     @Test
@@ -90,22 +96,25 @@ class ServeCommandTest {
         
         assertThat(exitCode).isEqualTo(1);
         
-        String output = outputStream.toString();
-        assertThat(output).contains("出力ディレクトリが存在しません");
-        assertThat(output).contains("nonexistent");
+        String error = errorStream.toString();
+        assertThat(error).contains("出力ディレクトリが存在しません");
+        assertThat(error).contains("nonexistent");
     }
 
     @Test
     void shouldValidatePortRange() throws Exception {
+        // 出力ディレクトリを作成してポート検証が実行されるようにする
+        Files.createDirectories(tempDir.resolve("_site"));
+        
         String[] args = {"serve", "--port", "99999"};
         
         int exitCode = serveCommand.execute(args, tempDir);
         
         assertThat(exitCode).isEqualTo(1);
         
-        String output = outputStream.toString();
-        assertThat(output).contains("無効なポート番号");
-        assertThat(output).contains("1-65535");
+        String error = errorStream.toString();
+        assertThat(error).contains("無効なポート番号");
+        assertThat(error).contains("1-65535");
     }
 
     @Test

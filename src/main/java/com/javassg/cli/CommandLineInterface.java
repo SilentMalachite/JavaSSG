@@ -3,13 +3,29 @@ package com.javassg.cli;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * JavaSSGのメインCLIインターフェース
  */
 public class CommandLineInterface {
     
-    private static final String VERSION = "1.0.0";
+    private static String getVersion() {
+        try (java.io.InputStream is = CommandLineInterface.class.getResourceAsStream("/version.properties")) {
+            if (is != null) {
+                java.util.Properties props = new java.util.Properties();
+                props.load(is);
+                return props.getProperty("version", "1.0.0");
+            }
+        } catch (IOException e) {
+            // プロパティファイルが存在しない場合はデフォルトを返す
+        }
+        return "1.0.0";
+    }
     
     public int run(String[] args) {
         if (args.length == 0) {
@@ -83,7 +99,7 @@ public class CommandLineInterface {
     }
     
     private void showVersion() {
-        System.out.println("JavaSSG " + VERSION);
+        System.out.println("JavaSSG " + getVersion());
         System.out.println("Java Static Site Generator");
     }
 }

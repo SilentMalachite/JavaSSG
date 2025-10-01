@@ -84,11 +84,13 @@ class DevServerTest {
         assertThat(devServer.isRunning()).isFalse();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         assertThat(devServer.isRunning()).isTrue();
         assertThat(devServer.getPort()).isEqualTo(testPort);
         
         devServer.stop();
+        Thread.sleep(100); // サーバー停止を待機
         
         assertThat(devServer.isRunning()).isFalse();
     }
@@ -98,6 +100,7 @@ class DevServerTest {
         setupStaticFiles();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + testPort + "/style.css"))
@@ -118,6 +121,7 @@ class DevServerTest {
         setupHtmlFiles();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + testPort + "/index.html"))
@@ -136,6 +140,7 @@ class DevServerTest {
     @Test
     void shouldReturn404ForMissingFiles() throws Exception {
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + testPort + "/nonexistent.html"))
@@ -153,6 +158,7 @@ class DevServerTest {
         setupHtmlFiles();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + testPort + "/"))
@@ -170,6 +176,7 @@ class DevServerTest {
         setupHtmlFiles();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + testPort + "/index.html"))
@@ -186,6 +193,7 @@ class DevServerTest {
     @Test
     void shouldHandleWebSocketConnections() throws Exception {
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         // WebSocket接続のテスト（簡易版）
         // テスト用のWebSocketクライアントを作成
@@ -204,16 +212,18 @@ class DevServerTest {
     @Test
     void shouldTriggerLiveReloadOnFileChange() throws Exception {
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         // ファイル変更の監視を開始
         devServer.startWatching();
+        Thread.sleep(300); // 監視開始を待機
         
         // テストファイルを変更
         Path testFile = tempDir.resolve("_site").resolve("test.html");
         Files.writeString(testFile, "<html><body><h1>Updated</h1></body></html>");
         
         // ライブリロードがトリガーされるまで待機
-        Thread.sleep(500);
+        Thread.sleep(1000); // 待機時間を延長
         
         // BuildEngineが呼び出されることを確認
         verify(buildEngine).buildIncremental(any());
@@ -225,6 +235,7 @@ class DevServerTest {
     void shouldHandleConcurrentRequests() throws Exception {
         setupHtmlFiles();
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         // 複数の同時リクエスト
         List<CompletableFuture<HttpResponse<String>>> futures = List.of(
@@ -250,6 +261,7 @@ class DevServerTest {
         setupCustomErrorPages();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + testPort + "/nonexistent.html"))
@@ -267,6 +279,7 @@ class DevServerTest {
         setupVariousFileTypes();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         // CSS
         HttpResponse<String> cssResponse = sendRequest("/style.css");
@@ -292,6 +305,7 @@ class DevServerTest {
         setupLargeFile();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + testPort + "/large.txt"))
@@ -311,6 +325,7 @@ class DevServerTest {
         setupHtmlFiles();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         HttpResponse<String> response = sendRequest("/index.html");
         
@@ -328,6 +343,7 @@ class DevServerTest {
         setupHtmlFiles();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create("http://localhost:" + testPort + "/index.html"))
@@ -349,6 +365,7 @@ class DevServerTest {
         setupHtmlFiles();
         
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         // ディレクトリトラバーサル攻撃の試行
         HttpRequest request = HttpRequest.newBuilder()
@@ -364,6 +381,7 @@ class DevServerTest {
     @Test
     void shouldThrowExceptionOnPortInUse() throws Exception {
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         // 同じポートで別のサーバーを起動しようとする
         DevServer anotherServer = new DevServer(siteConfig, buildEngine);
@@ -377,6 +395,7 @@ class DevServerTest {
     void shouldProvideServerStatistics() throws Exception {
         setupHtmlFiles();
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         // いくつかのリクエストを送信
         sendRequest("/index.html");
@@ -396,6 +415,7 @@ class DevServerTest {
     void shouldLogRequestsAndResponses() throws Exception {
         setupHtmlFiles();
         devServer.start();
+        Thread.sleep(200); // サーバー起動を待機
         
         sendRequest("/index.html");
         

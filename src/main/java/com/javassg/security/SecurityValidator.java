@@ -3,6 +3,8 @@ package com.javassg.security;
 import com.javassg.model.SecurityLimits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.owasp.html.HtmlPolicyBuilder;
+import org.owasp.html.PolicyFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,7 +20,19 @@ public class SecurityValidator {
     private static final Logger logger = LoggerFactory.getLogger(SecurityValidator.class);
     
     private final SecurityLimits limits;
-    
+
+    // OWASP HTML Sanitizer ポリシー
+    private static final PolicyFactory HTML_SANITIZER_POLICY = new HtmlPolicyBuilder()
+        .allowElements("p", "br", "b", "i", "u", "em", "strong", "code", "pre",
+                      "h1", "h2", "h3", "h4", "h5", "h6",
+                      "ul", "ol", "li", "blockquote", "a", "img")
+        .allowAttributes("href").onElements("a")
+        .allowAttributes("title").onElements("a")
+        .allowAttributes("rel").matching(Pattern.compile("nofollow|noopener|noreferrer")).onElements("a")
+        .allowAttributes("src", "alt", "title").onElements("img")
+        .allowStandardUrlProtocols()
+        .toFactory();
+
     // 危険なパターンの定義
     private static final Pattern SCRIPT_PATTERN = Pattern.compile("<script[^>]*>.*?</script>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE);
     private static final Pattern IFRAME_PATTERN = Pattern.compile("<iframe[^>]*>.*?</iframe>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE);
@@ -212,27 +226,31 @@ public class SecurityValidator {
     }
     
     /**
-     * HTMLの検証とサニタイゼーション
+     * HTMLの検証とサニタイゼーション（OWASP HTML Sanitizer使用）
      */
     public String sanitizeHtml(String html) {
-        if (html == null) {
+        if (html == null || html.trim().isEmpty()) {
             return "";
         }
-        
-        // 危険なタグを削除
-        html = SCRIPT_PATTERN.matcher(html).replaceAll("");
-        html = IFRAME_PATTERN.matcher(html).replaceAll("");
-        html = OBJECT_PATTERN.matcher(html).replaceAll("");
-        html = EMBED_PATTERN.matcher(html).replaceAll("");
-        
-        // 危険なイベントハンドラを削除
-        html = EVENT_HANDLER_PATTERN.matcher(html).replaceAll("");
-        
-        // linkタグとmetaタグを削除（コンテンツ内では不要）
-        html = LINK_PATTERN.matcher(html).replaceAll("");
-        html = META_PATTERN.matcher(html).replaceAll("");
-        
-        return html;
+
+        try {
+            // OWASP HTML Sanitizerを使用して安全なHTMLに変換
+            String sanitized = HTML_SANITIZER_POLICY.sanitize(html);
+
+            // 長さ制限をチェック
+            if (sanitized.length() > limits.maxDescriptionLength() * 2) {
+                logger.warn("サニタイズ後のHTMLが長すぎます: {}", sanitized.length());
+                return sanitized.substring(0, limits.maxDescriptionLength() * 2) + "...";
+            }
+
+            logger.debug("HTMLサニタイズ完了: {} -> {} 文字", html.length(), sanitized.length());
+            return sanitized.trim();
+
+        } catch (Exception e) {
+            logger.error("HTMLサニタイズ中にエラーが発生しました", e);
+            // フォールバック：すべてのHTMLタグを除去
+            return html.replaceAll("<[^>]+>", "").trim();
+        }
     }
     
     /**

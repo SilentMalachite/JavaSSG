@@ -149,8 +149,9 @@ public class MarkdownParser {
             System.arraycopy(lines, 1, yamlLines, 0, endIndex - 1);
             var yamlContent = String.join("\n", yamlLines);
             
+            // フロントマターのサイズを検証
             if (yamlContent.length() > securityLimits.maxFrontMatterSize()) {
-                throw new IllegalArgumentException("フロントマターのサイズが制限を超えています");
+                throw new IllegalArgumentException("フロントマターのサイズが制限を超えています: " + yamlContent.length() + " bytes");
             }
             
             // YAMLをパース
@@ -159,8 +160,11 @@ public class MarkdownParser {
                 return (Map<String, Object>) map;
             }
             return Map.of();
+        } catch (IllegalArgumentException e) {
+            // サイズ制限エラーは再スロー
+            throw e;
         } catch (Exception e) {
-            // フロントマターの解析に失敗した場合は空のMapを返す
+            // その他のフロントマター解析エラーは空のMapを返す
             return Map.of();
         }
     }
@@ -194,9 +198,10 @@ public class MarkdownParser {
     private String generateSlug(String filename) {
         var nameWithoutExt = filename.replaceFirst("\\.[^.]+$", "");
         return nameWithoutExt.toLowerCase()
-            .replaceAll("[^a-z0-9\\-_]", "-")
-            .replaceAll("-+", "-")
-            .replaceAll("^-|-$", "");
+            .replaceAll("_", "-")  // アンダースコアをハイフンに変換
+            .replaceAll("[^a-z0-9\\-]", "-")  // 許可されていない文字をハイフンに
+            .replaceAll("-+", "-")  // 連続するハイフンを1つに
+            .replaceAll("^-|-$", "");  // 先頭と末尾のハイフンを削除
     }
     
     private Page createEmptyPage(String filename, LocalDateTime lastModified) {

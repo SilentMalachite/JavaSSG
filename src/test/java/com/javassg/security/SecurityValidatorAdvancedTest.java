@@ -106,7 +106,8 @@ class SecurityValidatorAdvancedTest {
         String sanitized = validator.sanitizeHtml(html);
 
         assertThat(sanitized).contains("<p>Safe content</p>");
-        assertThat(sanitized).contains("<img src='safe.jpg' />");
+        // OWASP Sanitizerはダブルクォートを使用
+        assertThat(sanitized).containsAnyOf("<img src=\"safe.jpg\" />", "<img src='safe.jpg' />");
         assertThat(sanitized).doesNotContain("<embed");
         assertThat(sanitized).doesNotContain("<link");
         assertThat(sanitized).doesNotContain("<meta");

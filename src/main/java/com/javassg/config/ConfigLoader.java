@@ -45,10 +45,14 @@ public class ConfigLoader {
             return parseConfigWithJackson(configContent);
             
         } catch (com.javassg.security.SecurityException e) {
+            logger.error("設定ファイルのセキュリティ検証に失敗: {}", e.getMessage());
             throw new IOException("設定ファイルのセキュリティ検証に失敗しました: " + e.getMessage(), e);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            logger.error("設定ファイルのYAML解析に失敗: {}", e.getMessage());
+            throw new IOException("設定ファイルのYAML形式が正しくありません: " + e.getMessage(), e);
         } catch (Exception e) {
-            logger.warn("設定ファイルの解析に失敗しました。デフォルト設定を使用します: {}", e.getMessage());
-            return SiteConfig.defaultConfig();
+            logger.error("設定ファイルの読み込みに失敗しました", e);
+            throw new IOException("設定ファイルの読み込みに失敗しました: " + e.getMessage(), e);
         }
     }
     
@@ -56,14 +60,38 @@ public class ConfigLoader {
         try {
             // JacksonでYAMLを安全に解析
             ConfigDto configDto = yamlMapper.readValue(yamlContent, ConfigDto.class);
-            
+
             // DTOからドメインモデルに変換
-            return convertToSiteConfig(configDto);
-            
+            SiteConfig siteConfig = convertToSiteConfig(configDto);
+
+            // 設定の妥当性を検証
+            List<String> validationErrors = siteConfig.validate();
+            if (!validationErrors.isEmpty()) {
+                logger.warn("設定の検証でエラーが見つかりました: {}", validationErrors);
+                // 致命的でないエラーは続行、致命的なエラーは例外をスロー
+                List<String> criticalErrors = validationErrors.stream()
+                    .filter(error -> error.contains("必須") || error.contains("正しくありません"))
+                    .toList();
+
+                if (!criticalErrors.isEmpty()) {
+                    throw new IOException("設定に致命的なエラーがあります: " + String.join(", ", criticalErrors));
+                }
+            }
+
+            return siteConfig;
+
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            logger.error("YAML形式の解析に失敗しました: {}", e.getOriginalMessage());
+            throw new IOException("設定ファイルのYAML形式が正しくありません: " + e.getOriginalMessage(), e);
         } catch (Exception e) {
             logger.warn("Jacksonでの解析に失敗しました。フォールバック解析を試行します: {}", e.getMessage());
             // フォールバック: 簡易解析
-            return parseConfigFallback(yamlContent);
+            try {
+                return parseConfigFallback(yamlContent);
+            } catch (Exception fallbackException) {
+                logger.error("フォールバック解析にも失敗しました", fallbackException);
+                throw new IOException("設定ファイルの解析に完全に失敗しました: " + e.getMessage(), e);
+            }
         }
     }
     
@@ -122,32 +150,58 @@ public class ConfigLoader {
         return new SiteConfig(siteInfo, buildConfig, serverConfig, blogConfig, limits, plugins);
     }
     
-    private static SiteConfig parseConfigFallback(String yamlContent) {
-        // 簡易的なフォールバック解析
-        SiteInfo siteInfo = new SiteInfo(
-            extractValue(yamlContent, "title", "Test Site"),
-            extractValue(yamlContent, "description", "Test Description"),
-            extractValue(yamlContent, "url", "https://example.com"),
-            extractValue(yamlContent, "language", "ja-JP"),
-            new Author(
-                extractValue(yamlContent, "name", "Author"),
-                extractValue(yamlContent, "email", "author@example.com")
-            )
-        );
-        
-        BuildConfig buildConfig = new BuildConfig(
-            extractValue(yamlContent, "contentDirectory", "content"),
-            extractValue(yamlContent, "outputDirectory", "_site"),
-            extractValue(yamlContent, "staticDirectory", "static"),
-            extractValue(yamlContent, "templatesDirectory", "templates")
-        );
-        
-        ServerConfig serverConfig = new ServerConfig(
-            extractIntValue(yamlContent, "port", 8080),
-            extractBooleanValue(yamlContent, "liveReload", true)
-        );
-        
-        return new SiteConfig(siteInfo, buildConfig, serverConfig, null, null, null);
+    private static SiteConfig parseConfigFallback(String yamlContent) throws IOException {
+        try {
+            logger.warn("フォールバック設定を使用して設定ファイルを解析します");
+
+            // 簡易的なフォールバック解析
+            SiteInfo siteInfo = new SiteInfo(
+                extractValue(yamlContent, "title", "My Site"),
+                extractValue(yamlContent, "description", "A static site generated with JavaSSG"),
+                extractValue(yamlContent, "url", "https://example.com"),
+                extractValue(yamlContent, "language", "en-US"),
+                new Author(
+                    extractValue(yamlContent, "name", "Site Author"),
+                    extractValue(yamlContent, "email", "author@example.com")
+                )
+            );
+
+            BuildConfig buildConfig = new BuildConfig(
+                extractValue(yamlContent, "contentDirectory", "content"),
+                extractValue(yamlContent, "outputDirectory", "_site"),
+                extractValue(yamlContent, "staticDirectory", "static"),
+                extractValue(yamlContent, "templatesDirectory", "templates")
+            );
+
+            ServerConfig serverConfig = new ServerConfig(
+                extractIntValue(yamlContent, "port", 8080),
+                extractBooleanValue(yamlContent, "liveReload", true)
+            );
+
+            BlogConfig blogConfig = new BlogConfig(
+                extractIntValue(yamlContent, "postsPerPage", 10),
+                extractBooleanValue(yamlContent, "generateArchive", true),
+                extractBooleanValue(yamlContent, "generateCategories", true),
+                extractBooleanValue(yamlContent, "generateTags", true)
+            );
+
+            // セキュリティ制限
+            SecurityLimits limits = SecurityLimits.defaultLimits();
+
+            SiteConfig siteConfig = new SiteConfig(siteInfo, buildConfig, serverConfig, blogConfig, limits, List.of());
+
+            // フォールバック設定の検証
+            List<String> validationErrors = siteConfig.validate();
+            if (!validationErrors.isEmpty()) {
+                logger.warn("フォールバック設定に検証エラーがあります: {}", validationErrors);
+            }
+
+            return siteConfig;
+
+        } catch (Exception e) {
+            logger.error("フォールバック設定の解析に失敗しました", e);
+            throw new IOException("フォールバック設定の解析に失敗しました: " + e.getMessage(), e);
+        }
     }
     
     private static String extractValue(String yaml, String key, String defaultValue) {
